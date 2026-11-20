@@ -9753,7 +9753,6 @@ document.querySelectorAll('#tplMode button').forEach((b) => { b.onclick = () => 
 $('#tplFile').onchange = async (e) => { const f = e.target.files[0]; if (!f) return; try { const names = midiNames(await f.arrayBuffer());
     S.tpl = { file: f.name, names }; ls.set('press-template', S.tpl); S.tplOn = true; ss.set('press-tpl-on', true); useTemplate(); fresh(); } catch (er) { $('#tplInfo').textContent = 'Could not read that file: ' + er.message; } e.target.value = ''; };
 useTemplate();
-if (!ss.get('press-rack', null)) $('#rackBox').open = true;
 drawRack(); drawMood(); drawLen(); drawHints(); pressNow();
 </script>
 <script>(function(){try{if(!/\.github\.io$/.test(location.hostname))return;var q=new URLSearchParams({p:location.pathname,t:document.title,s:screen.width+','+screen.height,rnd:Math.random().toString(36).slice(2)});if(document.referrer&&document.referrer.indexOf(location.hostname)<0)q.set('r',document.referrer.split('?')[0]);var u='https://divine-monday.goatcounter.com/count?'+q;if(!(navigator.sendBeacon&&navigator.sendBeacon(u)))new Image().src=u;}catch(e){}})();</script>
