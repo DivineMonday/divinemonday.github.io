@@ -56,11 +56,11 @@ canvas.rip{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .menu{position:absolute;right:28px;top:66px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:8px;display:flex;flex-direction:column;min-width:240px;z-index:20;box-shadow:0 12px 32px rgba(30,29,43,.14)}
 .menu a,.menu button{display:block;text-align:left;padding:12px 14px;border-radius:10px;border:none;background:transparent;font-size:15px;color:var(--ink);text-decoration:none}
 .menu a:hover,.menu button:hover{background:var(--bg)}
-.start{position:fixed;inset:0;background:rgba(30,29,43,.35);display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;z-index:30}
+.start{position:fixed;inset:0;top:var(--toph,0px);background:rgba(30,29,43,.35);display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;z-index:30}
 .start .box{background:var(--card);border-radius:24px;padding:28px;max-width:980px;width:100%}
 .gcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;margin-top:14px}
 .gc{text-align:left;padding:16px;border-radius:16px;border:1px solid var(--line);background:var(--bg);font-size:16px;font-weight:700}
-.gc small{display:block;font-weight:500;font-size:13px;color:var(--soft);margin-top:4px}
+a.gc{display:block;color:inherit;text-decoration:none}.gc.classical{border-color:#C9A227}.gc small{display:block;font-weight:500;font-size:13px;color:var(--soft);margin-top:4px}
 .barplay{position:absolute;right:-6px;top:-8px;width:26px;height:26px;border-radius:50%;border:2px solid var(--card);background:var(--ink);color:var(--onink);font-size:10px;line-height:1;padding:0;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2}.barplay:hover{transform:scale(1.1)}
 .gc:hover{border-color:var(--ink)}.gc.own{border:1.5px solid var(--ink)}.gc.diy{border:1.5px dashed var(--accent);color:var(--accent)}.gc.diy small{color:var(--soft)}.shl{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--soft);margin-right:6px;vertical-align:middle}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:var(--onink);border-radius:14px;padding:12px 16px;display:flex;gap:12px;align-items:center;font-size:14px;z-index:40;max-width:92vw}
@@ -740,7 +740,9 @@ E.breakdownOf = function (song) {
 };
 E.callResponse = (song) => !!E.GENRES[song.genre].call || E.formOf(song) === 'chant';
 
-E.GENRE_ORDER = ['divine', 'techno', 'minimal', 'dubtechno', 'house', 'club', 'acid', 'trance', 'eurodance', 'breakbeat', 'dnb', 'garage', 'ebm', 'triphop', 'chillout', 'ambient', 'hiphop', 'dub', 'newwave', 'synthwave', 'funk', 'punk', 'blues', 'songwriter'];
+E.GENRE_ORDER = ['blues', 'hiphop', 'punk', 'newwave', 'house', 'techno', 'acid', 'breakbeat', 'triphop', 'dnb', 'synthwave', 'divine', 'minimal', 'dubtechno', 'club', 'trance', 'eurodance', 'garage', 'ebm', 'chillout', 'ambient', 'dub', 'funk', 'songwriter']; // a walk through time: the order the styles were born
+// when each style was born, shown small on the genre cards
+E.GENRE_YEAR = { blues: '1920s', rock: '1954', pop: '1963', hiphop: '1973', punk: '1976', newwave: '1978', house: '1984', techno: '1985', acid: '1987', breakbeat: '1990', triphop: '1991', dnb: '1993', synthwave: '2005', funk: '1965', dub: '1968', ambient: '1978', trance: '1990', garage: '1997', ebm: '1981', chillout: '1990', eurodance: '1991', minimal: '1994', dubtechno: '1993', songwriter: '1960s' };
 // hidden until their deep upgrade (Nov 2026): they stay in the motor, so old songs open and other machines can still borrow them, they just are not offered
 E.HIDDEN_GENRES = ['divine', 'free', 'minimal', 'dubtechno', 'club', 'trance', 'eurodance', 'garage', 'ebm', 'chillout', 'ambient', 'dub', 'funk', 'songwriter'];
 E.GENRE_ORDER_FULL = E.GENRE_ORDER.slice();
@@ -4557,7 +4559,7 @@ function mmss(sec) { const m = Math.floor(sec / 60), x = Math.round(sec % 60); r
 
 /* ---------- screen A: the overview ---------- */
 function renderTop() {
-  const el = $('#top'); el.innerHTML = ''; const has = !!song();
+  const el = $('#top'); if (!el._ro && window.ResizeObserver) { el._ro = new ResizeObserver(() => document.documentElement.style.setProperty('--toph', el.offsetHeight + 'px')); el._ro.observe(el); } el.innerHTML = ''; const has = !!song();
   const step = (n, label, state, dis, go) => h('button', { class: 'step ' + state, disabled: dis || null, title: dis ? 'Pick a genre first' : null, onclick: go || null }, h('b', null, state === 'done' ? '✓' : n), label);
   el.append(h('div', { class: 'logo' }, 'Divine ', h('span', null, GROOVE ? 'Groove' : 'Music'), ' Studio'),
     h('nav', { class: 'steps', 'aria-label': 'Steps' }, step(1, 'Genre', has ? 'done' : 'on', false, () => openStart()), h('span', { class: 'dash', 'aria-hidden': 'true' }), step(2, 'Structure', has ? 'done' : '', !has, () => { if (st.mode !== 'overview') { st.mode = 'overview'; stopAll(); render(); } const c = $('#structCard'); if (c) { c.scrollIntoView({ behavior: 'smooth', block: 'center' }); const b = c.querySelector('.sec.on') || c.querySelector('.sec'); if (b) b.focus(); } }), h('span', { class: 'dash', 'aria-hidden': 'true' }), step(3, 'Parts', has ? (st.mode === 'get' ? 'done' : 'on') : '', !has, () => { if (st.mode !== 'overview') { st.mode = 'overview'; stopAll(); render(); } const r = $('#right'); if (r) { r.scrollIntoView({ behavior: 'smooth', block: 'center' }); const b = r.querySelector('.mode button'); if (b) b.focus(); } }), h('span', { class: 'dash', 'aria-hidden': 'true' }), step(4, 'Get it', st.mode === 'get' ? 'on' : '', !has, () => openGet())),
@@ -5214,7 +5216,7 @@ function openStart() {
     song() ? h('button', { class: 'ib', style: 'margin-top:12px', onclick: closeStart }, '← Back to my song') : last && last.song ? h('button', { class: 'ib', style: 'margin-top:12px', onclick: () => { st.song = last.song; D.ensureTypes && D.ensureTypes(st.song); st.sec = last.sec || 0; clampSec(); closeStart(); render(); } }, 'Continue where you left off') : null,
     h('button', { class: 'gc own', id: 'g_own', style: 'margin-top:14px;width:100%', onclick: openOwnFile }, 'Start from your own file: MIDI or WAV', h('small', null, GROOVE ? 'Your voice or melody in; the machine makes a whole beat around it. Where you sing it holds back, where you are quiet it opens up.' : 'Your voice or melody in; the machine makes the beat and every tonal part around it. Where you sing it holds back, where you are quiet it opens up.')),
     h('button', { class: 'ib', id: 'g_surprise', style: 'margin-top:12px;font-size:17px;padding:10px 18px;font-weight:700', onclick: openSurprise }, '⚄ Surprise me'),
-    h('div', { class: 'gcards' }, [h('button', { class: 'gc diy', id: 'g_diy', onclick: openShadowPick }, 'DIY: start empty', h('small', null, GROOVE ? 'An empty beat; you tap it in' : 'Every part empty; you make it'))].concat(D.GENRE_ALL.map((g) => { const G = D.GENRES[g]; return h('button', { class: 'gc', id: 'g_' + g, onclick: () => makeSong(g) }, G.name, h('small', null, (G.bpm ? G.bpm[0] + ' to ' + G.bpm[1] + ' bpm' : ''))); }))))));
+    h('div', { class: 'gcards' }, [h('button', { class: 'gc diy', id: 'g_diy', onclick: openShadowPick }, 'DIY: start empty', h('small', null, GROOVE ? 'An empty beat; you tap it in' : 'Every part empty; you make it'))].concat(GROOVE || window.DMS_UJAM ? [] : [h('a', { class: 'gc classical', id: 'g_classical', href: '../symphony/' }, 'Classical', h('small', null, '1600s \u00b7 opens the Symphony Machine'))]).concat(D.GENRE_ALL.map((g) => { const G = D.GENRES[g]; return h('button', { class: 'gc', id: 'g_' + g, onclick: () => makeSong(g) }, G.name, h('small', null, (D.GENRE_YEAR && D.GENRE_YEAR[g] ? D.GENRE_YEAR[g] + ' \u00b7 ' : '') + (G.bpm ? G.bpm[0] + ' to ' + G.bpm[1] + ' bpm' : ''))); }))))));
 }
 // DIY, step two: which genre shows its ideas as grey shadows, or none at all
 function openShadowPick() {
