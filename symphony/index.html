@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="description" content="Seat your orchestra, give each musician a mood, pick a conductor and an occasion. A whole symphony as MIDI, one track per instrument. By Divine Monday.">
+<meta name="description" content="Seat your orchestra, give each musician a mood or an influence, pick a conductor and an occasion. A whole symphony as MIDI, one track per instrument. By Divine Monday.">
 <meta name="author" content="Divine Monday"><meta name="copyright" content="© 2026 Divine Monday. All rights reserved.">
 <meta name="theme-color" content="#130E11">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Divine Monday">
 <meta property="og:title" content="Divine Symphony Machine">
-<meta property="og:description" content="Seat your orchestra, give each musician a mood, pick a conductor and an occasion. A whole symphony as MIDI, one track per instrument. By Divine Monday.">
+<meta property="og:description" content="Seat your orchestra, give each musician a mood or an influence, pick a conductor and an occasion. A whole symphony as MIDI, one track per instrument. By Divine Monday.">
 <meta property="og:url" content="https://divinemonday.github.io/symphony/">
 <meta property="og:image" content="https://divinemonday.github.io/og/og-symphony-2.png">
 <meta property="og:image:width" content="1200">
@@ -222,7 +222,7 @@ details.more[open]>summary::before{content:"- "}
 
 <section class="step" id="sWho">
   <div class="sh"><span class="num serif">2</span><span class="st serif">Who plays</span><span class="muted">Tap a seat, or the conductor.</span></div>
-  <div class="go"><span class="seg" id="seatMode"><button data-v="on">On or off</button><button data-v="inf">Give a mood</button></span><button class="btn" id="allClean">Everybody focused</button><button class="btn" id="allRandom">Random moods</button><label class="opt allsame">Everybody on <select id="allSame" aria-label="Give the whole orchestra the same mood"></select></label></div>
+  <div class="go"><span class="seg" id="seatMode"><button data-v="on">On or off</button><button data-v="inf">Give an influence</button></span><button class="btn" id="allClean">Everybody clean</button><button class="btn" id="allRandom">Random influences</button><label class="opt allsame">Everybody on <select id="allSame" aria-label="Give the whole orchestra the same influence"></select></label></div>
   <div class="orch">
     <svg class="hall" id="hall" viewBox="0 0 640 396" role="group" aria-label="Orchestra seating"></svg>
     <div style="display:flex;flex-direction:column;gap:12px">
@@ -1948,7 +1948,7 @@ function phrasing(c, parts) {
    p: push in ticks (minus is ahead), j: jitter, dr: drift over a phrase, v: velocity offset, vj: velocity jitter, ex: dynamic expansion (below 1 squeezes),
    d: length factor, acc: chance of an accent, sev: how far gone (0 clean, 1 lost) */
 const INFL = {
-  clean: { name: 'Clear head', sev: 0 },
+  clean: { name: 'Clean', sev: 0 },
   coffee: { name: 'Coffee', p: -10, j: 4, d: .82, v: 5, acc: .12, sev: .15 },
   sugar: { name: 'Sugar', p: -6, j: 6, v: 8, acc: .15, crash: 1, sev: .25 },
   energy: { name: 'Energy drink', p: -16, j: 8, d: .75, v: 8, acc: .2, sev: .35 },
@@ -2915,7 +2915,7 @@ function crewText(res) {
   const who = res.leader && res.leader.who ? (res.leader.who === 'conductor' ? 'the conductor' : 'the ' + IM[res.leader.who].name.toLowerCase()) : 'the conductor';
   const on = Object.entries(res.influence || {}).filter(([id, st]) => st !== 'clean' && S.inst.has(id));
   let h = 'Conductor: <b>' + INAME[res.conductor || 'clean'] + '</b>. The orchestra follows ' + who + '. Story: <b>' + (res.arc || 'free') + '</b>.';
-  h += on.length ? '<br>In the mood: ' + on.map(([id, st]) => IM[id].name + ' <b>' + INAME[st] + '</b>').join(', ') + '.' : '<br>Every musician plays with a clear head.';
+  h += on.length ? '<br>Under the influence: ' + on.map(([id, st]) => IM[id].name + ' <b>' + INAME[st] + '</b>').join(', ') + '.' : '<br>Every musician plays clean.';
   return h;
 }
 /* compose */
