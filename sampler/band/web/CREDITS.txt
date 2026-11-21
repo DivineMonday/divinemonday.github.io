@@ -1,0 +1,5 @@
+Divine Monday Band pack (Blues, Rock, Punk, Pop)
+All sources CC0 1.0 (public domain):
+- Karoryfer Samples: Big Rusty Drums, Black And Blue Basses, Black And Green Guitars (github.com/sfzinstruments)
+- Versilian Community Sample Library (VCSL): Yamaha upright piano, Hohner Special 20 harmonica, claps, tambourine (github.com/sgossner/VCSL)
+Trimmed, mixed to mono and saved as MP3 by Divine Monday. The crunch guitar is the clean recording through a soft drive.
