@@ -2816,7 +2816,7 @@ function drawPresets() {
 }
 
 /* who plays, the conductor, the occasion */
-const GROUPS = [['A clear head', ['clean']], ['Moods', ['happy', 'playful', 'proud', 'love', 'heartbroken', 'lonely', 'angry', 'hateful', 'stressed', 'nervous', 'sleepy', 'hungry']],
+const GROUPS = [['Moods', ['happy', 'playful', 'proud', 'love', 'heartbroken', 'lonely', 'angry', 'hateful', 'stressed', 'nervous', 'sleepy', 'hungry']],
   ['Influences', ['coffee', 'sugar', 'energy', 'ibuprofen', 'phone', 'jetlag']]];
 const INAME = {}; Y.INFL.forEach(i => INAME[i.id] = i.name); INAME.random = 'Random';
 const OCC = [
@@ -2852,7 +2852,7 @@ function stateChips(cur, onPick, withRandom) {
   gs.forEach(([h, ids]) => {
     const g = document.createElement('div'); g.className = 'grp'; g.innerHTML = '<h4>' + h + '</h4>';
     const c = document.createElement('div'); c.className = 'chips sm';
-    ids.forEach(id => { const b = document.createElement('button'); b.className = 'chip'; b.textContent = INAME[id]; b.setAttribute('aria-pressed', cur === id); b.onclick = () => onPick(id); c.appendChild(b); });
+    ids.forEach(id => { const b = document.createElement('button'); b.className = 'chip'; b.textContent = INAME[id]; b.setAttribute('aria-pressed', cur === id); b.onclick = () => onPick(cur === id && id !== 'random' ? 'clean' : id); c.appendChild(b); });
     g.appendChild(c); box.appendChild(g);
   });
   return box;
