@@ -5094,7 +5094,7 @@ async function readOwnFile(f) {
   try {
     if (isMidi) {
       const mid = D.parseMidi(await f.arrayBuffer());
-      const tr = mid.tracks.filter((t) => t.notes.length && !t.notes.every((n) => n.ch === 9)); if (!tr.length) throw new Error(f.name + ' has no melody notes.');
+      const tr = mid.tracks.filter((t) => t.notes.length && !t.notes.every((n) => n.ch === 9)); if (!tr.length || ownIsBeat(mid, f.name)) { const dn = [].concat(...mid.tracks.map((t) => t.notes)); if (!dn.length) throw new Error(f.name + ' has no notes.'); ownBeat(f, mid, dn); return; }
       const med = (t) => { const a = t.notes.map((n) => n.p).sort((x, y) => x - y); return a[a.length >> 1]; };
       const m = tr.find((t) => /melody|vocal|voice|lead|sing/i.test(t.name || '') && t.notes.length >= 8) || tr.reduce((a, t) => (t.notes.length >= 8 && med(t) > med(a) ? t : a), tr[0]);
       const notes = m.notes.filter((n) => n.ch !== 9).map((n) => ({ t: n.t, d: n.d, p: n.p, v: n.v || 96 }));
@@ -5107,6 +5107,32 @@ async function readOwnFile(f) {
       ownTempo({ kind: 'wav', name: f.name, buf, x, sr: buf.sampleRate, notes: res.notes, bpm: res.bpm, key: res.notes.length >= 6 ? D.detectKey(res.notes) : null });
     }
   } catch (e) { ownSheet([h('h1', { style: 'margin:0;font-size:26px' }, 'That did not work'), h('p', { style: 'color:var(--soft)' }, (e && e.message) || 'This file could not be read.'), h('button', { class: 'ib', onclick: openStart }, '← Back')]); }
+}
+// a beat file: every note sits on a drum pad (or the file says it is a beat), so the song grows around your groove
+function ownIsBeat(mid, name) { const ns = [].concat(...mid.tracks.map((t) => t.notes)); return /_beat_/i.test(name) || (ns.length > 0 && ns.every((n) => n.ch === 9)); }
+function ownBeat(f, mid, notes) {
+  const flat = f.name.toLowerCase().replace(/[^a-z0-9]/g, ''), P = D.PLUGINS, keys = Object.keys(P).filter((k) => P[k].drums);
+  // which drum map: the plugin named in the file name, else the map that explains the most notes
+  let pk = keys.find((k) => flat.includes(k.toLowerCase()) || flat.includes(P[k].name.toLowerCase().replace(/[^a-z0-9]/g, '')));
+  if (!pk) { let best = -1; for (const k of keys) { const set = new Set(P[k].drums), c = notes.filter((n) => set.has(n.p)).length; if (c > best) { best = c; pk = k; } } }
+  const drumMap = {}; P[pk].drums.forEach((p, i) => { if (drumMap[p] == null) drumMap[p] = i; });
+  const bpm = mid.bpm ? Math.round(mid.bpm * 10) / 10 : 120;
+  const genre = D.GENRE_ALL.find((g) => D.GENRES[g] && flat.includes(D.GENRES[g].name.toLowerCase().replace(/[^a-z0-9]/g, ''))) || ownGenre(bpm);
+  const sg = D.freshSong(genre, { name: f.name.replace(/\.[^.]+$/, '').replace(/^DM_/, '').replace(/_/g, ' ').replace(/\s*(Beat|ImpactXT|XLNXO|GM).*$/i, '').trim().slice(0, 30) || 'My groove' });
+  sg.bpm = bpm; sg.bpmAuto = false; const km = f.name.match(/_([A-G])(s|b)?(m)?_\d+\.midi?$/i); if (km) { const r = ({ C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 })[km[1].toUpperCase()] + (km[2] === 's' ? 1 : km[2] === 'b' ? -1 : 0); sg.key = { root: (r + 12) % 12, scale: km[3] ? 'minor' : 'major' }; sg.keyAuto = false; } // the key in the file name
+  const BT = D.barTicks(sg), end = Math.max(...notes.map((n) => n.t + n.d)), total = Math.max(1, Math.ceil(end / BT));
+  // the song markers in the file are the structure; without them the groove plays as one long verse
+  const TY = { intro: 'intro', verse: 'verse', prechorus: 'prechorus', chorus: 'chorus', build: 'build', drop: 'drop', break: 'break', bridge: 'break', outro: 'outro', fill: 'fill' };
+  const mk = (mid.markers || []).map((m) => ({ b: Math.round(m.t / BT), ty: TY[(m.text || '').toLowerCase().replace(/[^a-z]/g, '').replace(/\d+$/, '')] })).filter((m) => m.ty).sort((a, b) => a.b - b.b);
+  if (mk.length >= 2) sg.sections = mk.map((m, i) => ({ id: 's' + D.newSeed(), type: m.ty, bars: Math.max(1, (i + 1 < mk.length ? mk[i + 1].b : total) - m.b) })).filter((x) => x.bars > 0);
+  else sg.sections = [{ id: 's' + D.newSeed(), type: 'verse', bars: total }];
+  // each kind of section takes its groove from the first place it plays in your file
+  sg.parts.beat.mode = 'yours'; sg.parts.beat.plugin = pk; let at = 0; const done = {};
+  for (const x of sg.sections) { if (!done[x.type]) { const m = D.notesToMat(sg, 'beat', notes, { offsetBars: at, drumMap }); if (m.lanes.some((l) => l.some((v) => v > 0))) { D.setUser(sg, 'beat', x.type, m); done[x.type] = true; } } at += x.bars; }
+  for (const x of sg.sections) if (!done[x.type]) D.setUser(sg, 'beat', x.type, D.emptyMat('beat', sg));
+  for (const p of PARTS) if (p !== 'beat' && sg.parts[p].mode === 'off' && !GROOVE) sg.parts[p].mode = 'machine';
+  makeSong(genre, { sg, own: true }); sg.parts.beat.plugin = pk; st.mode = 'get'; render();
+  toast('Your groove from ' + f.name + ' is the beat of this song: ' + Math.round(bpm) + ' bpm, ' + D.GENRES[genre].name + (GROOVE ? '.' : '. The machine plays the other parts around it.'));
 }
 // step two: the tempo decides where the bars fall, so it must be right; the file's own tempo or what the machine heard is filled in
 function ownTempo(o) {
