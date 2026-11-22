@@ -82,6 +82,21 @@ foot{display:block}
 @media (max-width:900px){.top{height:auto;padding:12px 16px;flex-wrap:wrap}.wrap{padding:16px}.left,.right{width:100%}.steps{order:3;flex:0 0 100%;width:100%;justify-content:flex-start;flex-wrap:wrap}}
 @media (max-width:600px){.top{padding:10px 12px;gap:8px;row-gap:8px}.logo{font-size:17px}.top .ib{height:38px;min-width:38px;padding:0 10px;font-size:14px;border-radius:10px}.steps{gap:2px;flex-wrap:nowrap;justify-content:space-between}.step{padding:6px 8px;font-size:12px;gap:5px}.step b{width:18px;height:18px;font-size:10px}.steps .dash{display:none}.top .dm-suite{margin-left:6px;padding:5px 10px;min-height:30px}.start{padding:12px 10px}.start .box{padding:18px 14px;border-radius:18px}.gcards{grid-template-columns:1fr 1fr;gap:8px}.gc{padding:12px;font-size:15px;border-radius:14px}.gc small{font-size:12px}}
 </style></head><body>
+<script>/* drop a file anywhere on the page: a frame lights up, the file goes where the load button sends it */
+window.dmDrop = function (route) {
+  const ov = document.createElement('div'); ov.id = 'dmDrop'; ov.hidden = true; ov.innerHTML = '<span>Drop your file</span>';
+  ov.style.cssText = 'position:fixed;inset:10px;z-index:9999;border:3px dashed #E5825C;border-radius:22px;background:rgba(20,21,30,.72);display:flex;align-items:center;justify-content:center;font:700 26px system-ui,sans-serif;color:#F3F1EA;pointer-events:none';
+  const add = () => document.body.append(ov); if (document.body) add(); else addEventListener('DOMContentLoaded', add);
+  const files = (e) => e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files'); let n = 0;
+  addEventListener('dragenter', (e) => { if (!files(e)) return; n++; ov.hidden = false; ov.style.display = 'flex'; });
+  addEventListener('dragleave', (e) => { if (!files(e)) return; if (--n <= 0) { n = 0; ov.hidden = true; ov.style.display = 'none'; } });
+  addEventListener('dragover', (e) => { if (files(e)) e.preventDefault(); });
+  addEventListener('drop', (e) => { if (!files(e)) return; e.preventDefault(); n = 0; ov.hidden = true; ov.style.display = 'none'; const fs = [...e.dataTransfer.files]; if (fs.length) try { route(fs); } catch (err) { console.error(err); } });
+};
+window.dmFeed = function (sel, fs) { const inp = document.querySelector(sel); if (!inp) return false; const dt = new DataTransfer(); fs.forEach((f) => dt.items.add(f)); inp.files = dt.files; inp.dispatchEvent(new Event('change', { bubbles: true })); return true; };
+window.dmIsMidi = (f) => /\.midi?$/i.test(f.name) || /midi/.test(f.type || '');
+</script>
+
 <header class="top" id="top"></header>
 <div class="wrap" id="wrap"><aside class="left" id="left"></aside><main class="mid" id="mid"></main><aside class="right" id="right"></aside></div>
 
@@ -5176,7 +5191,10 @@ function ownBuild(o, bpm) {
   makeSong(genre, { sg, own: true }); st.mode = 'get'; render();
   toast('Your song follows ' + o.name + ': ' + Math.round(bpm) + ' bpm, ' + keyName(sg.key) + ', ' + D.GENRES[genre].name + '. Every part is ready; take the ones you need.');
 }
-function openSongFile() { const inp = h('input', { type: 'file', accept: '.json,application/json', style: 'display:none', onchange: async () => { const f = inp.files[0]; if (!f) return; try { const o = JSON.parse(await f.text()), sg = o.song || o; if (!sg.sections || !sg.parts) throw new Error('not a song'); D.ensureTypes && D.ensureTypes(sg); stopAll(); st.song = sg; st.hist = []; st.fut = []; st.sec = 0; st.mode = 'overview'; save(); closeStart(); render(); toast('Opened ' + f.name); } catch (e) { toast('That file is not a Divine song.'); } } }); document.body.append(inp); inp.click(); setTimeout(() => inp.remove(), 60000); }
+function openSongFile() { const inp = h('input', { type: 'file', accept: '.json,application/json', style: 'display:none', onchange: async () => { const f = inp.files[0]; if (!f) return; loadSongFile(f); } }); document.body.append(inp); inp.click(); setTimeout(() => inp.remove(), 60000); }
+async function loadSongFile(f) { try { const o = JSON.parse(await f.text()), sg = o.song || o; if (!sg.sections || !sg.parts) throw new Error('not a song'); D.ensureTypes && D.ensureTypes(sg); stopAll(); st.song = sg; st.hist = []; st.fut = []; st.sec = 0; st.mode = 'overview'; save(); closeStart(); render(); toast('Opened ' + f.name); } catch (e) { toast('That file is not a Divine song.'); } }
+// drag a file onto the page: a song file opens, a MIDI or a recording (WAV, MP3 and more) starts a song from your own file
+if (window.dmDrop) window.dmDrop((fs) => { const f = fs[0]; if (/\.json$/i.test(f.name)) loadSongFile(f); else readOwnFile(f); });
 
 /* ---------- screen D: get it, with a preview ---------- */
 const RAIN = { list: [], raf: 0 };

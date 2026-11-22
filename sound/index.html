@@ -78,6 +78,21 @@ footer{color:var(--soft);font-size:13px;text-align:center;padding:24px 0 96px}
 .saveBox{display:flex;flex-direction:column;gap:6px;margin-top:12px}.saveBox[hidden]{display:none}.saveHd{font-size:13px;opacity:.7}.saveLink{color:inherit;font-size:14px;text-decoration:underline;word-break:break-all}</style>
 </head>
 <body>
+<script>/* drop a file anywhere on the page: a frame lights up, the file goes where the load button sends it */
+window.dmDrop = function (route) {
+  const ov = document.createElement('div'); ov.id = 'dmDrop'; ov.hidden = true; ov.innerHTML = '<span>Drop your file</span>';
+  ov.style.cssText = 'position:fixed;inset:10px;z-index:9999;border:3px dashed #E5825C;border-radius:22px;background:rgba(20,21,30,.72);display:flex;align-items:center;justify-content:center;font:700 26px system-ui,sans-serif;color:#F3F1EA;pointer-events:none';
+  const add = () => document.body.append(ov); if (document.body) add(); else addEventListener('DOMContentLoaded', add);
+  const files = (e) => e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files'); let n = 0;
+  addEventListener('dragenter', (e) => { if (!files(e)) return; n++; ov.hidden = false; ov.style.display = 'flex'; });
+  addEventListener('dragleave', (e) => { if (!files(e)) return; if (--n <= 0) { n = 0; ov.hidden = true; ov.style.display = 'none'; } });
+  addEventListener('dragover', (e) => { if (files(e)) e.preventDefault(); });
+  addEventListener('drop', (e) => { if (!files(e)) return; e.preventDefault(); n = 0; ov.hidden = true; ov.style.display = 'none'; const fs = [...e.dataTransfer.files]; if (fs.length) try { route(fs); } catch (err) { console.error(err); } });
+};
+window.dmFeed = function (sel, fs) { const inp = document.querySelector(sel); if (!inp) return false; const dt = new DataTransfer(); fs.forEach((f) => dt.items.add(f)); inp.files = dt.files; inp.dispatchEvent(new Event('change', { bubbles: true })); return true; };
+window.dmIsMidi = (f) => /\.midi?$/i.test(f.name) || /midi/.test(f.type || '');
+</script>
+
 <main>
 <div class="top"><h1>Divine <b>Sound</b> Machine</h1><div class="lang" style="display:none" role="group" aria-label="Language / Taal / Sprache"><button type="button" data-l="en">EN</button><button type="button" data-l="nl">NL</button><button type="button" data-l="de">DE</button></div><a href="../" data-tt="back">&larr; Suite</a></div>
 
@@ -1896,6 +1911,9 @@ function fix(){busy=false;var l=null;for(var q=0;q<LOGO.length&&!l;q++)l=[].slic
   if(row||P.classList.contains('dm-row'))l.insertAdjacentElement('afterend',a);
   else{var w=document.createElement('div');w.className='dm-row';w.style.cssText='display:flex;align-items:center;flex-wrap:wrap;gap:6px 0;justify-content:'+(ps.textAlign==='center'||ps.alignItems==='center'?'center':'flex-start');P.insertBefore(w,l);w.appendChild(l);w.appendChild(a);l.style.margin='0';}}
  document.querySelectorAll(HIDE).forEach(function(e){if(!e.classList.contains('dm-suite'))e.style.display='none';});}
-new MutationObserver(function(){if(!busy){busy=true;requestAnimationFrame(fix);}}).observe(document.documentElement,{childList:true,subtree:true});fix();})();</script>
+new MutationObserver(function(){if(!busy){busy=true;requestAnimationFrame(fix);}}).observe(document.documentElement,{childList:true,subtree:true});fix();})();
+// drag a file onto the page: MIDI goes to Load MIDI once the pack is made, everything else is a new source (WAV, MP3, video and more)
+if (window.dmDrop) window.dmDrop((fs) => { if (fs.every(window.dmIsMidi) && !$('#cBurp').hidden) window.dmFeed('#mfile', fs); else window.dmFeed('#file', fs); });
+</script>
 </body>
 </html>

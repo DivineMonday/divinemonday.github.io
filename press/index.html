@@ -136,6 +136,21 @@ input[type=color]{width:44px;height:38px;border:1px solid var(--line);border-rad
 .lbl{color:var(--mu);font-size:14px;min-width:84px}
 @media (max-width:760px){.sides{grid-template-columns:1fr}.lbl{min-width:0;flex-basis:100%}}
 </style></head><body>
+<script>/* drop a file anywhere on the page: a frame lights up, the file goes where the load button sends it */
+window.dmDrop = function (route) {
+  const ov = document.createElement('div'); ov.id = 'dmDrop'; ov.hidden = true; ov.innerHTML = '<span>Drop your file</span>';
+  ov.style.cssText = 'position:fixed;inset:10px;z-index:9999;border:3px dashed #E5825C;border-radius:22px;background:rgba(20,21,30,.72);display:flex;align-items:center;justify-content:center;font:700 26px system-ui,sans-serif;color:#F3F1EA;pointer-events:none';
+  const add = () => document.body.append(ov); if (document.body) add(); else addEventListener('DOMContentLoaded', add);
+  const files = (e) => e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files'); let n = 0;
+  addEventListener('dragenter', (e) => { if (!files(e)) return; n++; ov.hidden = false; ov.style.display = 'flex'; });
+  addEventListener('dragleave', (e) => { if (!files(e)) return; if (--n <= 0) { n = 0; ov.hidden = true; ov.style.display = 'none'; } });
+  addEventListener('dragover', (e) => { if (files(e)) e.preventDefault(); });
+  addEventListener('drop', (e) => { if (!files(e)) return; e.preventDefault(); n = 0; ov.hidden = true; ov.style.display = 'none'; const fs = [...e.dataTransfer.files]; if (fs.length) try { route(fs); } catch (err) { console.error(err); } });
+};
+window.dmFeed = function (sel, fs) { const inp = document.querySelector(sel); if (!inp) return false; const dt = new DataTransfer(); fs.forEach((f) => dt.items.add(f)); inp.files = dt.files; inp.dispatchEvent(new Event('change', { bubbles: true })); return true; };
+window.dmIsMidi = (f) => /\.midi?$/i.test(f.name) || /midi/.test(f.type || '');
+</script>
+
 <div id="app">
 <header>
   <div class="logo serif">Divine <i>Record</i> Press</div>
@@ -9807,5 +9822,8 @@ new MutationObserver(function(){if(!busy){busy=true;requestAnimationFrame(fix);}
   window.dmBurpDom = (cfg) => { const a = $q(cfg.anchor); if (!a || $q('#burpBtn')) return; const b = document.createElement('button'); b.id = 'burpBtn'; b.type = 'button'; b.className = cfg.cls || a.className.replace(/\bbig\b/, '').trim(); b.textContent = 'All at once';
     b.title = cfg.title || 'Burp: one press, everything this machine can choose thrown open, then made'; b.style.fontWeight = '700'; b.onclick = () => burp(cfg); a.after(b); };
 })();
-dmBurpDom({ anchor: '#make', cls: 'btn big', dice: ['#sdice', '#mood', '#ndice', '#rdice'], selects: ['#key', '#tempo'], groups: ['#len button', '#beatFrom button'], toggles: ['#voiceOn'], make: '#make' });</script><!--/BURPDOM-->
+dmBurpDom({ anchor: '#make', cls: 'btn big', dice: ['#sdice', '#mood', '#ndice', '#rdice'], selects: ['#key', '#tempo'], groups: ['#len button', '#beatFrom button'], toggles: ['#voiceOn'], make: '#make' });
+// drag a file onto the page: a track (WAV, MP3, MIDI and more) loads like the Load a track button
+if (window.dmDrop) window.dmDrop((fs) => window.dmFeed('#trk', [fs[0]]));
+</script><!--/BURPDOM-->
 </body></html>
