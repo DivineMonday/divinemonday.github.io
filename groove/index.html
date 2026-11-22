@@ -85,7 +85,7 @@ foot{display:block}
 <script>/* drop a file anywhere on the page: a frame lights up, the file goes where the load button sends it */
 window.dmDrop = function (route) {
   const ov = document.createElement('div'); ov.id = 'dmDrop'; ov.hidden = true; ov.innerHTML = '<span>Drop your file</span>';
-  ov.style.cssText = 'position:fixed;inset:10px;z-index:9999;border:3px dashed #E5825C;border-radius:22px;background:rgba(20,21,30,.72);display:flex;align-items:center;justify-content:center;font:700 26px system-ui,sans-serif;color:#F3F1EA;pointer-events:none';
+  ov.style.cssText = 'position:fixed;inset:10px;z-index:9999;border:3px dashed #E5825C;border-radius:22px;background:rgba(20,21,30,.72);display:none;align-items:center;justify-content:center;font:700 26px system-ui,sans-serif;color:#F3F1EA;pointer-events:none';
   const add = () => document.body.append(ov); if (document.body) add(); else addEventListener('DOMContentLoaded', add);
   const files = (e) => e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files'); let n = 0;
   addEventListener('dragenter', (e) => { if (!files(e)) return; n++; ov.hidden = false; ov.style.display = 'flex'; });
