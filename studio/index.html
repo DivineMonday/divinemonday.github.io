@@ -82,16 +82,13 @@ foot{display:block}
 @media (max-width:900px){.top{height:auto;padding:12px 16px;flex-wrap:wrap}.wrap{padding:16px}.left,.right{width:100%}.steps{order:3;flex:0 0 100%;width:100%;justify-content:flex-start;flex-wrap:wrap}}
 @media (max-width:600px){.top{padding:10px 12px;gap:8px;row-gap:8px}.logo{font-size:17px}.top .ib{height:38px;min-width:38px;padding:0 10px;font-size:14px;border-radius:10px}.steps{gap:2px;flex-wrap:nowrap;justify-content:space-between}.step{padding:6px 8px;font-size:12px;gap:5px}.step b{width:18px;height:18px;font-size:10px}.steps .dash{display:none}.top .dm-suite{margin-left:6px;padding:5px 10px;min-height:30px}.start{padding:12px 10px}.start .box{padding:18px 14px;border-radius:18px}.gcards{grid-template-columns:1fr 1fr;gap:8px}.gc{padding:12px;font-size:15px;border-radius:14px}.gc small{font-size:12px}}
 </style></head><body>
-<script>/* drop a file anywhere on the page: a frame lights up, the file goes where the load button sends it */
+<script>/* drop a file anywhere on the page: it goes where the load button sends it */
 window.dmDrop = function (route) {
-  const ov = document.createElement('div'); ov.id = 'dmDrop'; ov.hidden = true; ov.innerHTML = '<span>Drop your file</span>';
-  ov.style.cssText = 'position:fixed;inset:10px;z-index:9999;border:3px dashed #E5825C;border-radius:22px;background:rgba(20,21,30,.72);display:none;align-items:center;justify-content:center;font:700 26px system-ui,sans-serif;color:#F3F1EA;pointer-events:none';
-  const add = () => document.body.append(ov); if (document.body) add(); else addEventListener('DOMContentLoaded', add);
   const files = (e) => e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files'); let n = 0;
-  addEventListener('dragenter', (e) => { if (!files(e)) return; n++; ov.hidden = false; ov.style.display = 'flex'; });
-  addEventListener('dragleave', (e) => { if (!files(e)) return; if (--n <= 0) { n = 0; ov.hidden = true; ov.style.display = 'none'; } });
+  addEventListener('dragenter', (e) => { if (files(e)) n++; });
+  addEventListener('dragleave', (e) => { if (files(e) && --n <= 0) n = 0; });
   addEventListener('dragover', (e) => { if (files(e)) e.preventDefault(); });
-  addEventListener('drop', (e) => { if (!files(e)) return; e.preventDefault(); n = 0; ov.hidden = true; ov.style.display = 'none'; const fs = [...e.dataTransfer.files]; if (fs.length) try { route(fs); } catch (err) { console.error(err); } });
+  addEventListener('drop', (e) => { if (!files(e)) return; e.preventDefault(); n = 0; const fs = [...e.dataTransfer.files]; if (fs.length) try { route(fs); } catch (err) { console.error(err); } });
 };
 window.dmFeed = function (sel, fs) { const inp = document.querySelector(sel); if (!inp) return false; const dt = new DataTransfer(); fs.forEach((f) => dt.items.add(f)); inp.files = dt.files; inp.dispatchEvent(new Event('change', { bubbles: true })); return true; };
 window.dmIsMidi = (f) => /\.midi?$/i.test(f.name) || /midi/.test(f.type || '');
@@ -5302,7 +5299,7 @@ function openStart() {
     h('h1', { style: 'margin:0;font-size:28px' }, APP_NAME),
     h('p', { style: 'margin:6px 0 0;color:var(--soft)' }, GROOVE ? 'Pick a genre. The machine makes a whole beat; you shape it.' : 'Pick a genre. The machine makes a whole song; you shape it.'),
     song() ? h('button', { class: 'ib', style: 'margin-top:12px', onclick: closeStart }, '← Back to my song') : last && last.song ? h('button', { class: 'ib', style: 'margin-top:12px', onclick: () => { st.song = last.song; D.ensureTypes && D.ensureTypes(st.song); st.sec = last.sec || 0; clampSec(); closeStart(); render(); } }, 'Continue where you left off') : null,
-    h('button', { class: 'gc own', id: 'g_own', style: 'margin-top:14px;width:100%', onclick: openOwnFile }, 'Start from your own file: MIDI or WAV', h('small', null, GROOVE ? 'Your voice or melody in; the machine makes a whole beat around it. Where you sing it holds back, where you are quiet it opens up.' : 'Your voice or melody in; the machine makes the beat and every tonal part around it. Where you sing it holds back, where you are quiet it opens up.')),
+    h('button', { class: 'gc own', id: 'g_own', style: 'margin-top:14px;width:100%', onclick: openOwnFile }, 'Start from your own file: MIDI, WAV or MP3, tap here or drop it on the page', h('small', null, GROOVE ? 'Your voice or melody in; the machine makes a whole beat around it. Where you sing it holds back, where you are quiet it opens up.' : 'Your voice or melody in; the machine makes the beat and every tonal part around it. Where you sing it holds back, where you are quiet it opens up.')),
     h('button', { class: 'ib', id: 'g_surprise', style: 'margin-top:12px;font-size:17px;padding:10px 18px;font-weight:700', onclick: openSurprise }, '⚄ Surprise me'),
     h('div', { class: 'gcards' }, [h('button', { class: 'gc diy', id: 'g_diy', onclick: openShadowPick }, 'DIY: start empty', h('small', null, GROOVE ? 'An empty beat; you tap it in' : 'Every part empty; you make it'))].concat(GROOVE || window.DMS_UJAM ? [] : [h('a', { class: 'gc classical', id: 'g_classical', href: '../symphony/' }, 'Classical', h('small', null, '1600s \u00b7 opens the Symphony Machine'))]).concat(D.GENRE_ALL.map((g) => { const G = D.GENRES[g]; return h('button', { class: 'gc', id: 'g_' + g, onclick: () => makeSong(g) }, G.name, h('small', null, (D.GENRE_YEAR && D.GENRE_YEAR[g] ? D.GENRE_YEAR[g] + ' \u00b7 ' : '') + (G.bpm ? G.bpm[0] + ' to ' + G.bpm[1] + ' bpm' : ''))); }))))));
 }
