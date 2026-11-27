@@ -146,20 +146,34 @@
     const G = D.GENRES[p.genre]; if (hint.bpm && G.bpm) { let b = hint.bpm; while (b < G.bpm[0]) b *= 2; while (b > G.bpm[1]) b /= 2; if (b >= G.bpm[0] && b <= G.bpm[1]) { s.bpm = Math.round(b); s.bpmAuto = false; } }
     const BT = D.barTicks(s), markers = []; let bar = 0; const cnt = {};
     for (const sec of s.sections) { cnt[sec.type] = (cnt[sec.type] || 0) + 1; markers.push({ t: bar * BT, text: sec.type[0].toUpperCase() + sec.type.slice(1) + ' ' + cnt[sec.type] }); bar += sec.bars; }
-    const bytes = bandMidi(s, markers, hint.beat);
-    const choir = C.follow(bytes, { style: p.style, men: p.men, women: p.women, seed: p.seed ^ 0x5bd1e995, song: true });
-    return { s, bytes, choir, A: C.analyseMidi(bytes) };
+    const tracks = bandTracks(s, hint.beat), first = bandMidi(s, markers, tracks);
+    const choir = C.follow(first, { style: p.style, men: p.men, women: p.women, seed: p.seed ^ 0x5bd1e995, song: true });
+    const bytes = bandMidi(s, markers, react(tracks, choir, BT));
+    return { s, bytes, choir, A: C.analyseMidi(first) };
   }
   // the band as MIDI; the beat speaks the language of the drum app you chose
-  function bandMidi(s, markers, beat) {
+  function bandTracks(s, beat) {
     const bp = D.PLUGINS[beat] ? beat : 'gm', fam = D.PLUGINS[bp].family && !D.PLUGINS[bp].noPlayer;
-    const tracks = TRACKS.map(([part, name], i) => { let notes = []; try { notes = D.applyMask(s, part, D.renderSong(s, part, { polished: true }), part === 'beat' ? bp : 'plain', { octave: 0, roles: {}, mode: part === 'beat' && fam ? 'instrument' : undefined }); if (part !== 'beat') notes = notes.filter((n) => !n.ks); } catch (e) { notes = []; } return { name, channel: part === 'beat' ? 9 : i, notes }; });
-    return D.writeMidi(tracks, { bpm: s.bpm, meter: s.meter, title: s.name, markers });
+    return TRACKS.map(([part, name], i) => { let notes = []; try { notes = D.applyMask(s, part, D.renderSong(s, part, { polished: true }), part === 'beat' ? bp : 'plain', { octave: 0, roles: {}, mode: part === 'beat' && fam ? 'instrument' : undefined }); if (part !== 'beat') notes = notes.filter((n) => !n.ks); } catch (e) { notes = []; } return { part, name, channel: part === 'beat' ? 9 : i, notes }; });
+  }
+  const bandMidi = (s, markers, tracks) => D.writeMidi(tracks, { bpm: s.bpm, meter: s.meter, title: s.name, markers });
+  // the band listens back: where the choir holds chords the pad rests, where it sings the tune the melody steps aside,
+  // and the answer only speaks in the choir's breaths
+  const CARRIES = new Set(['tune', 'unison', 'tutti', 'call', 'canon', 'finale']);
+  function react(tracks, choir, BT) {
+    const role = []; choir.markers.forEach((m, k) => { const b0 = Math.round(m.t / BT), b1 = k + 1 < choir.markers.length ? Math.round(choir.markers[k + 1].t / BT) : 1e6; for (let b = b0; b < Math.min(b1, b0 + 4096); b++) role[b] = choir.roles[k]; });
+    const sing = new Set(); for (const n of choir.notes) for (let b = Math.floor(n.t / BT); b <= Math.floor((n.t + n.d - 1) / BT); b++) sing.add(b);
+    const starts = choir.notes.map((n) => n.t).sort((a, b) => a - b), near = (t, w) => { let lo = 0, hi = starts.length; while (lo < hi) { const m = (lo + hi) >> 1; if (starts[m] < t - w) lo = m + 1; else hi = m; } return lo < starts.length && starts[lo] <= t + w; };
+    for (const tr of tracks) { const bar = (n) => Math.floor(n.t / BT);
+      if (tr.part === 'pad') tr.notes = tr.notes.filter((n) => !sing.has(bar(n)));
+      if (tr.part === 'melody') tr.notes = tr.notes.filter((n) => !(sing.has(bar(n)) && CARRIES.has(role[bar(n)])));
+      if (tr.part === 'answer') tr.notes = tr.notes.filter((n) => !sing.has(bar(n)) || !near(n.t, PPQ)); }
+    return tracks;
   }
   // the same song again with the beat for another drum app; the choir stays as it was
   function rebeat(r, beat) { const s = r.song, BT = D.barTicks(s), markers = []; let bar = 0; const cnt = {};
     for (const sec of s.sections) { cnt[sec.type] = (cnt[sec.type] || 0) + 1; markers.push({ t: bar * BT, text: sec.type[0].toUpperCase() + sec.type.slice(1) + ' ' + cnt[sec.type] }); bar += sec.bars; }
-    r.file = withChoir(noConductor(bandMidi(s, markers, beat)), r.choir, 'Choir'); r.beat = beat; return r; }
+    r.file = withChoir(noConductor(bandMidi(s, markers, react(bandTracks(s, beat), r.choir, BT))), r.choir, 'Choir'); r.beat = beat; return r; }
   const BEATS = Object.keys(D.PLUGINS).filter((k) => { const p = D.PLUGINS[k]; return k !== 'plain' && (!p.parts || p.parts.includes('beat')); });
   function compose(o, onStep) {
     const history = o.history || [], n = o.sketches || 4, base = o.seed || (Math.floor(Math.random() * 1e9) + 1); let best = null, i = 0;

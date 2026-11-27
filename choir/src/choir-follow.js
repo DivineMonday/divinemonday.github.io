@@ -170,20 +170,28 @@
       for (const k of cand) { if (quiet() >= want) break; if (roles[k - 1] === 'rest' || roles[k + 1] === 'rest') continue; roles[k] = 'rest'; }
     }
     // a song is not a symphony: the choir knows verse from chorus
+    // a song is not a symphony: the band owns the verses, the choir saves itself for the chorus, the break and the end
+    const half = new Array(n).fill(false);
     if (o.song) {
       const type = (s) => (s.label.toLowerCase().match(/intro|verse|prechorus|chorus|build|drop|break|bridge|outro|fill/) || ['verse'])[0];
-      const nCh = secs.filter((s) => type(s) === 'chorus' || type(s) === 'drop').length; let ci = 0, vi = 0;
-      secs.forEach((s, k) => { const t = type(s), later = /later/.test(s.label);
-        if (t === 'intro' || t === 'fill') roles[k] = 'rest';
-        else if (t === 'verse') { roles[k] = vi++ === 0 || later ? 'rest' : pick(style === 'gospel' ? ['call', 'padHigh', 'rest'] : style === 'gregorian' ? ['drone', 'padLow', 'rest'] : ['padHigh', 'answer', 'rest', 'padLow']); }
-        else if (t === 'prechorus' || t === 'build') roles[k] = pick(style === 'gospel' ? ['stabs', 'unison'] : ['unison', 'pad', 'padHigh']);
-        else if (t === 'chorus' || t === 'drop') { roles[k] = ci === 0 ? (style === 'gospel' ? 'stabs' : 'tune') : 'tutti'; if (!later) ci++; if (ci === nCh && k === n - 1) roles[k] = 'finale'; }
-        else if (t === 'break' || t === 'bridge') roles[k] = pick(style === 'gregorian' ? ['drone', 'unison'] : ['padHigh', 'unison', 'canon', 'answer']);
+      const isCh = (s) => ['chorus', 'drop'].includes(type(s));
+      const chIdx = secs.map((s, k) => (isCh(s) ? k : -1)).filter((k) => k >= 0), lastCh = chIdx[chIdx.length - 1], firstCh = chIdx[0];
+      const lastBuild = secs.map((s, k) => (['prechorus', 'build'].includes(type(s)) && k < lastCh ? k : -1)).filter((k) => k >= 0).pop();
+      secs.forEach((s, k) => { const t = type(s);
+        if (t === 'intro' || t === 'fill' || t === 'verse') roles[k] = 'rest';
+        else if (t === 'prechorus' || t === 'build') roles[k] = k === lastBuild ? (style === 'gospel' ? 'stabs' : 'unison') : 'rest';
+        else if (isCh(s)) { roles[k] = k === firstCh || (secs[k - 1] && isCh(secs[k - 1]) && k - 1 === firstCh) ? (style === 'gospel' ? 'stabs' : 'tune') : 'tutti'; if (k === firstCh) half[k] = true; }
+        else if (t === 'break' || t === 'bridge') roles[k] = pick(style === 'gregorian' ? ['drone', 'unison'] : style === 'gospel' ? ['call', 'padHigh'] : ['padHigh', 'unison', 'canon']);
         else if (t === 'outro') roles[k] = 'finale'; });
       if (!roles.includes('finale')) roles[n - 1] = 'finale';
+      // never more than about 45 percent of the song
+      const total = secs.reduce((a, s) => a + s.to - s.from, 0), used = () => secs.reduce((a, s, k) => a + (roles[k] === 'rest' ? 0 : (s.to - s.from) * (half[k] ? 0.5 : 1)), 0);
+      const order = secs.map((s, k) => k).filter((k) => roles[k] !== 'rest' && roles[k] !== 'finale').sort((a, b) => (['prechorus', 'build'].includes(type(secs[b])) - ['prechorus', 'build'].includes(type(secs[a]))) || (isCh(secs[a]) - isCh(secs[b])) || (b === lastCh) - (a === lastCh));
+      for (const k of order) { if (used() <= total * 0.45) break; if (k === lastCh) continue; if (isCh(secs[k]) && !half[k]) half[k] = true; else roles[k] = 'rest'; }
     }
     const fit = (r) => { if (both) return r; if (men) return { padHigh: 'pad', padLow: 'pad', canon: 'tune', drone: 'unison' }[r] || r; return { padLow: 'pad', drone: 'unison', canon: 'tune' }[r] || r; };
     secs.forEach((s, k) => { s.role = fit(roles[k]); s.start = s.from; if (['pad', 'padHigh', 'padLow', 'unison', 'tune'].includes(s.role) && s.to - s.from >= 12 && k > 0 && chance(0.35)) s.start = s.from + Math.floor((s.to - s.from) / 8) * 4; });
+    if (o.song) secs.forEach((s, k) => { s.start = half[k] && s.to - s.from >= 4 ? s.from + Math.max(2, Math.floor((s.to - s.from) / 4) * 2) : s.from; });
 
     // ----- the voices -----
     const rgFull = rangesFor(Z, men, women), rgMen = rangesFor(Z, true, false), rgWom = rangesFor(Z, false, true);
@@ -252,6 +260,9 @@
     for (const x of out) { const r0 = rubOf(x.p, x); if (r0 < 0.5) continue; const L = lim[x.voice] || [Z.menLo, Z.womenHi]; let best = x.p, bs = r0;
       for (const d of [1, -1, 2, -2, 3, -3]) { const q = x.p + d; if (q < L[0] || q > L[1] || (!women && q > Z.menHi) || (!men && q < Z.womenLo)) continue; const sc = rubOf(q, x) + Math.abs(d) * 0.08; if (sc < bs) { bs = sc; best = q; } }
       x.p = best; }
+    for (const x of out) { const m = A.mel.filter((y) => y.t < x.t + x.d && y.t + y.d > x.t); if (!m.length || x.lead) continue;
+      if (!m.some((y) => { const d = Math.abs(y.p - x.p); return d > 0 && d <= 2; })) continue; const L = lim[x.voice] || [Z.menLo, Z.womenHi];
+      if (x.p - 12 >= L[0] && (women || x.p - 12 <= Z.menHi) && (men || x.p - 12 >= Z.womenLo)) x.p -= 12; else { const y = m[0].p; let q = y; while (q > L[1]) q -= 12; while (q < L[0]) q += 12; if (q <= L[1]) x.p = q; } }
     return finish(out, M, A, secs, Z, men, women, style, o);
   }
 
