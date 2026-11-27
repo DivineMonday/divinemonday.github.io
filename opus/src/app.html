@@ -27,6 +27,7 @@ h1{font-family:"Bodoni 72",Didot,"Bodoni MT","Playfair Display",Georgia,serif;fo
 h1 i{color:var(--gold)}
 .lead{color:var(--mu);margin:8px auto 26px;max-width:560px}
 .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center}
+.name{display:flex;gap:8px;width:100%;max-width:420px}.name input{flex:1;background:var(--card2);color:var(--tx);border:1px solid var(--line);border-radius:14px;padding:12px 14px;font:700 18px Inter,system-ui,sans-serif;min-height:48px;text-align:center;min-width:0}.dice{width:48px;background:var(--card2);color:var(--tx);border:1px solid var(--line);border-radius:14px;font-size:22px;cursor:pointer}.dice:hover{border-color:var(--gold)}
 select{background:var(--card2);color:var(--tx);border:1px solid var(--line);border-radius:14px;padding:12px 14px;font:inherit;min-height:48px;min-width:230px}
 select:focus,button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .go{background:var(--gold);color:#1a1310;border:0;border-radius:999px;padding:20px 44px;font:700 22px Inter,system-ui,sans-serif;cursor:pointer;margin:26px auto 0;display:block;box-shadow:0 10px 40px rgba(217,168,78,.18)}
@@ -57,7 +58,8 @@ footer a{color:var(--mu)}
 <div class="hero">
   <h1>Divine <i>Opus</i></h1>
   <p class="lead">One button, a whole symphony with a choir. The machine chooses everything, sketches several versions in silence and gives you only the best.</p>
-  <div class="row"><select id="feel" aria-label="Mood"><option value="">Surprise me</option></select></div>
+  <div class="row"><div class="name"><input type="text" id="nm" aria-label="Name of the piece" maxlength="40"><button class="dice" id="nmDice" type="button" title="A new name" aria-label="A new name">⚄</button></div></div>
+  <div class="row" style="margin-top:12px"><select id="feel" aria-label="Mood"><option value="">Surprise me</option></select></div>
   <button class="go" id="go" type="button">Let it sound</button>
   <button class="drop" id="drop" type="button">Drop anything here, or choose a file: a MIDI, a song, a photo, a text. The machine reacts to it.</button>
   <input type="file" id="file" hidden>
@@ -94,7 +96,11 @@ footer a{color:var(--mu)}
   const store = { get(k, d) { try { const v = localStorage.getItem('dop-' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem('dop-' + k, JSON.stringify(v)); } catch (e) {} } };
   for (const f of O.FEELS) $('#feel').add(new Option(Y.FEELINGS[f].name, f));
   $('#feel').value = store.get('feel', ''); $('#feel').onchange = () => store.set('feel', $('#feel').value);
-  let hint = null, clicks = 0, last = null;
+  let hint = null, clicks = 0, last = null, own = store.get('own', false);
+  const newName = () => C.makeName(Math.floor(Math.random() * 1e9));
+  $('#nm').value = store.get('name', '') || newName();
+  $('#nm').addEventListener('input', () => { own = !!$('#nm').value.trim(); store.set('own', own); store.set('name', $('#nm').value); });
+  $('#nmDice').onclick = () => { $('#nm').value = newName(); own = true; store.set('own', true); store.set('name', $('#nm').value); };
   const setHint = (h) => { hint = h; clicks = 0; $('#heard').innerHTML = h ? 'The machine heard ' + h.desc.replace(/[<>&]/g, '') + '. <button type="button" id="forget">forget it</button>' : ''; if (h) $('#forget').onclick = () => setHint(null); };
   const take = async (file) => { if (!file) return; $('#status').textContent = 'Listening to ' + file.name + '…'; try { setHint(await O.listen(file)); $('#status').textContent = ''; } catch (e) { $('#status').textContent = 'The machine could not read that file.'; } };
   $('#drop').onclick = () => $('#file').click(); $('#file').onchange = (e) => take(e.target.files[0]);
@@ -108,6 +114,7 @@ footer a{color:var(--mu)}
       const hist = store.get('hist', []);
       const r = await O.compose({ feel: $('#feel').value || null, hint, history: hist, sketches: 4, seed }, (i, n) => { $('#status').textContent = 'Sketching ' + i + ' of ' + n + ', keeping the best…'; });
       store.set('hist', hist.concat([{ figs: r.judge.figs, combo: r.judge.combo }]).slice(-20));
+      if (!own && last) $('#nm').value = newName(); r.name = $('#nm').value.trim() || r.name; r.fileName = r.fileName.replace(/^DM_Opus_[^]*?_(?=[A-G](?:b|sharp)?_(?:major|minor))/, 'DM_Opus_' + r.name.replace(/[^\w]+/g, '_') + '_'); own = false; store.set('own', false); store.set('name', $('#nm').value);
       last = r; show(r); $('#status').textContent = '';
     } catch (e) { console.error(e); $('#status').textContent = 'Something went wrong: ' + e.message; }
     $('#go').disabled = false; $('#again').disabled = false;
