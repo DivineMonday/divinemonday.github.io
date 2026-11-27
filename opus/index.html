@@ -3149,6 +3149,24 @@ else root.SYM = Y;
 
   // ---------- one file: the orchestra and the choir on its own track ----------
   const vlq = (n) => { const b = [n & 0x7f]; while ((n >>= 7)) b.unshift((n & 0x7f) | 0x80); return b; };
+  // read a track chunk into absolute-time events, raw bytes kept (running status written out)
+  function readTrack(d) { const ev = []; let i = 0, t = 0, rs = 0; const vl = () => { let v = 0, c; do { c = d[i++]; v = (v << 7) | (c & 0x7f); } while (c & 0x80); return v; };
+    while (i < d.length) { t += vl(); let st = d[i]; if (st & 0x80) i++; else st = rs;
+      if (st === 0xff) { const ty = d[i++], s0 = i, l = vl(), body = Array.from(d.subarray(i, i + l)); i += l; if (ty === 0x2f) break; ev.push({ t, b: [0xff, ty, ...Array.from(d.subarray(s0, s0 + (i - l - s0))), ...body], ty }); continue; }
+      if (st === 0xf0 || st === 0xf7) { const s0 = i, l = vl(); i += l; ev.push({ t, b: [st, ...Array.from(d.subarray(s0, i))] }); continue; }
+      rs = st; const n = (st & 0xf0) === 0xc0 || (st & 0xf0) === 0xd0 ? 1 : 2; ev.push({ t, b: [st, ...Array.from(d.subarray(i, i + n))] }); i += n; }
+    return ev; }
+  const writeTrack = (ev) => { const body = []; let last = 0; ev.sort((a, b) => a.t - b.t || (a.o || 0) - (b.o || 0)); for (const e of ev) { body.push(...vlq(Math.max(0, e.t - last)), ...e.b); last = Math.max(last, e.t); } body.push(0, 0xff, 0x2f, 0); return body; };
+  // no conductor track: tempo, metre and markers ride along on the first instrument, so the file starts at Piccolo and ends at Choir
+  function noConductor(b) {
+    const chunks = []; let i = 14; while (i + 8 <= b.length) { const l = ((b[i + 4] << 24) | (b[i + 5] << 16) | (b[i + 6] << 8) | b[i + 7]) >>> 0; chunks.push(b.subarray(i + 8, i + 8 + l)); i += 8 + l; }
+    if (chunks.length < 2) return b;
+    const cond = readTrack(chunks[0]).filter((e) => e.ty !== 0x03).map((e) => Object.assign(e, { o: -1 })), first = readTrack(chunks[1]);
+    const merged = [new Uint8Array(writeTrack(first.filter((e) => e.ty === 0x03).concat(cond, first.filter((e) => e.ty !== 0x03))))].concat(chunks.slice(2).map((c) => c));
+    let size = 14; for (const c of merged) size += 8 + c.length; const out = new Uint8Array(size); out.set(b.subarray(0, 14), 0); const nt = merged.length; out[10] = nt >> 8; out[11] = nt & 255; if (out[9] === 0) out[9] = 1;
+    let o = 14; for (const c of merged) { const L = c.length; out.set([0x4d, 0x54, 0x72, 0x6b, (L >>> 24) & 255, (L >>> 16) & 255, (L >>> 8) & 255, L & 255], o); out.set(c, o + 8); o += 8 + L; }
+    return out;
+  }
   function withChoir(orch, ch, name) {
     const b = orch, ntr = (b[10] << 8) | b[11], ev = [];
     const txt = (s) => Array.from(new TextEncoder().encode(s));
@@ -3190,7 +3208,7 @@ else root.SYM = Y;
   }
   function finish(b) {
     const { p, s, j } = b, m = s.m; let name = C.makeName(p.seed); for (let k = 1; k < 9; k++) { const w = name.toLowerCase().split(' ').filter((x) => x.length > 3); if (new Set(w).size === w.length) break; name = C.makeName(p.seed + k * 977); }
-    const file = withChoir(s.bytes, s.choir, 'Choir');
+    const file = withChoir(noConductor(s.bytes), s.choir, 'Choir');
     const secs = Math.round(s.choir.seconds), fe = p.feel ? Y.FEELINGS[p.feel].name : null;
     const parts = (m.markers || []).filter((x) => /^\d+\. /.test(x.text)).map((x) => ({ t: x.t, text: x.text.replace(/^\d+\. /, '') }));
     const who = p.men && p.women ? 'men and women' : p.men ? 'men' : 'women';
