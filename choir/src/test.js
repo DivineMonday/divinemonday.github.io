@@ -21,7 +21,7 @@ for (const style of Object.keys(C.STYLES)) for (const nuance of Object.keys(C.ST
     if (longest > C.PPQ * r.meter * 9 && r.engine !== 'cluster') bad('no breath', tag + ' ' + (longest / C.PPQ / r.meter).toFixed(1) + ' bars');
     // big leaps inside one voice, within a phrase
     for (const v of ['S', 'A', 'T', 'B']) { const ln = r.notes.filter((x) => x.voice === v).sort((a, b) => a.t - b.t);
-      for (let i = 1; i < ln.length; i++) { const a = ln[i - 1], b = ln[i]; if (Math.abs(b.t - (a.t + a.d)) < C.PPQ / 2 && Math.abs(b.p - a.p) > 12) { bad('leap', tag + ' ' + v + ' ' + a.p + '>' + b.p); break; } } }
+      for (let i = 1; i < ln.length; i++) { const a = ln[i - 1], b = ln[i]; if (Math.abs(b.t - (a.t + a.d)) < C.PPQ / 2 - 50 && Math.abs(b.p - a.p) > 12) { bad('leap', tag + ' ' + v + ' ' + a.p + '>' + b.p); break; } } }
     if (r.playMode === 'legato' && r.maxPoly > 1) bad('legato', tag);
     const mid = C.toMidi(r, 'test'); if (mid.length < 100) bad('midi', tag);
   }

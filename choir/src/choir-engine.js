@@ -401,6 +401,13 @@
       let poly = 1; const ev = []; for (const n of merged) { ev.push([n.t, 1], [n.t + n.d, -1]); } ev.sort((a, b) => a[0] - b[0] || a[1] - b[1]); let cur = 0; for (const [, d] of ev) { cur += d; poly = Math.max(poly, cur); }
       const legato = poly <= 1;
       if (legato) for (let i = 0; i + 1 < merged.length; i++) { const a = merged[i], b = merged[i + 1]; const gap = b.t - (a.t + a.d); if (gap >= 0 && gap < PPQ / 4 && a.p !== b.p) a.d = b.t - a.t + 30; }
+      // human: every voice has its own small lean (basses a hair late, the lead a hair early), every note a little scatter,
+      // and no two notes the same strength; legato keeps its glide, a repeated key keeps its gap
+      const H = mk(rng(o.seed * 13 + 5)), lean = {}, sh = (n) => { const k = n.voice || 'x'; if (lean[k] == null) lean[k] = H.int(-12, 12) + (/^B|men/i.test(k) ? 6 : 0); return lean[k] + H.int(-10, 10) - (n.lead ? 8 : 0); };
+      const moves = merged.map((n) => (n.t === 0 ? 0 : sh(n)));
+      if (legato) { for (let i = 0; i < merged.length; i++) { const a = merged[i], end = a.t + a.d, nx = merged[i + 1]; a.t = Math.max(0, a.t + moves[i]); const ov = nx && end > nx.t; a.d = Math.max(40, (ov ? nx.t + moves[i + 1] + 30 : end + H.int(-15, 10)) - a.t); } }
+      else { for (let i = 0; i < merged.length; i++) { const a = merged[i], end = a.t + a.d; a.t = Math.max(0, a.t + moves[i]); a.d = Math.max(40, end + H.int(-25, 15) - a.t); } merged.sort((a, b) => a.t - b.t || a.p - b.p); const byP2 = {}; for (const n of merged) { const q = byP2[n.p]; if (q && q.t + q.d > n.t - 20) q.d = Math.max(30, n.t - 20 - q.t); byP2[n.p] = n; } }
+      for (const n of merged) n.vel = clamp(n.vel + H.int(-6, 6) + ((n.t % (PPQ * meter)) < 40 ? 4 : 0), 10, 126);
       const strip = secs.map((s) => ({ label: s.label, start: s.start, beats: s.beats, men: s.men, women: s.women }));
       const desc = SP.name + ' · ' + ST.nuances[nuance] + ' · ' + FM.name + ' · ' + NOTE[K.tonic] + ' ' + MODE_NAMES[K.mode];
       return { notes: merged.map((n) => ({ t: n.t, d: n.d, p: n.p, v: n.vel, voice: n.voice })), cc, markers, beats, meter, key: NOTE[K.tonic] + ' ' + MODE_NAMES[K.mode], mode: K.mode, tonic: K.tonic, style: o.style, nuance, spirit: spiritKey, engine, form: o.form, role: o.role, who, strip, playMode: legato ? 'legato' : 'keys', maxPoly: poly, desc, zones: Z, rules };
