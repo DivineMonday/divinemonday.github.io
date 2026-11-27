@@ -251,5 +251,5 @@
     return { notes: merged.map((n) => ({ t: n.t, d: n.d, p: n.p, v: n.vel, voice: n.voice })), cc, markers, beats: A.bars * barT / PPQ, meter: M.sig.num, meterDen: M.sig.den, tempos: M.tempos, key, bpm, seconds: Math.round(secsT), strip,
       playMode: poly <= 1 ? 'legato' : 'keys', maxPoly: poly, zones: Z, desc: sty + ' choir with your orchestra · ' + key + ' · ' + A.bars + ' bars', fileTag: sty + 'WithOrchestra', mode: 'story', bars: A.bars, roles: secs.map((s) => s.role) };
   }
-  C.follow = follow; C.FOLLOW_MODES = MODES; C.parseMidi = parse;
+  C.follow = follow; C.FOLLOW_MODES = MODES; C.parseMidi = parse; C.analyseMidi = (bytes) => analyse(parse(bytes));
 })(typeof window !== 'undefined' ? window : globalThis);
