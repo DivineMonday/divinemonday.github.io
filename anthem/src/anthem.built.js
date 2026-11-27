@@ -146,17 +146,27 @@
     const G = D.GENRES[p.genre]; if (hint.bpm && G.bpm) { let b = hint.bpm; while (b < G.bpm[0]) b *= 2; while (b > G.bpm[1]) b /= 2; if (b >= G.bpm[0] && b <= G.bpm[1]) { s.bpm = Math.round(b); s.bpmAuto = false; } }
     const BT = D.barTicks(s), markers = []; let bar = 0; const cnt = {};
     for (const sec of s.sections) { cnt[sec.type] = (cnt[sec.type] || 0) + 1; markers.push({ t: bar * BT, text: sec.type[0].toUpperCase() + sec.type.slice(1) + ' ' + cnt[sec.type] }); bar += sec.bars; }
-    const tracks = TRACKS.map(([part, name], i) => { let notes = []; try { notes = D.applyMask(s, part, D.renderSong(s, part, { polished: true }), 'plain', { octave: 0, roles: {} }).filter((n) => !n.ks); } catch (e) { notes = []; } return { name, channel: part === 'beat' ? 9 : i, notes }; });
-    const bytes = D.writeMidi(tracks, { bpm: s.bpm, meter: s.meter, title: s.name, markers });
+    const bytes = bandMidi(s, markers, hint.beat);
     const choir = C.follow(bytes, { style: p.style, men: p.men, women: p.women, seed: p.seed ^ 0x5bd1e995, song: true });
     return { s, bytes, choir, A: C.analyseMidi(bytes) };
   }
+  // the band as MIDI; the beat speaks the language of the drum app you chose
+  function bandMidi(s, markers, beat) {
+    const bp = D.PLUGINS[beat] ? beat : 'gm', fam = D.PLUGINS[bp].family && !D.PLUGINS[bp].noPlayer;
+    const tracks = TRACKS.map(([part, name], i) => { let notes = []; try { notes = D.applyMask(s, part, D.renderSong(s, part, { polished: true }), part === 'beat' ? bp : 'plain', { octave: 0, roles: {}, mode: part === 'beat' && fam ? 'instrument' : undefined }); if (part !== 'beat') notes = notes.filter((n) => !n.ks); } catch (e) { notes = []; } return { name, channel: part === 'beat' ? 9 : i, notes }; });
+    return D.writeMidi(tracks, { bpm: s.bpm, meter: s.meter, title: s.name, markers });
+  }
+  // the same song again with the beat for another drum app; the choir stays as it was
+  function rebeat(r, beat) { const s = r.song, BT = D.barTicks(s), markers = []; let bar = 0; const cnt = {};
+    for (const sec of s.sections) { cnt[sec.type] = (cnt[sec.type] || 0) + 1; markers.push({ t: bar * BT, text: sec.type[0].toUpperCase() + sec.type.slice(1) + ' ' + cnt[sec.type] }); bar += sec.bars; }
+    r.file = withChoir(noConductor(bandMidi(s, markers, beat)), r.choir, 'Choir'); r.beat = beat; return r; }
+  const BEATS = Object.keys(D.PLUGINS).filter((k) => { const p = D.PLUGINS[k]; return k !== 'plain' && (!p.parts || p.parts.includes('beat')); });
   function compose(o, onStep) {
     const history = o.history || [], n = o.sketches || 4, base = o.seed || (Math.floor(Math.random() * 1e9) + 1); let best = null, i = 0;
     return new Promise((resolve, reject) => { const step = () => { try {
-      const p = plan(o.genre, o.hint, (base + i * 7919) >>> 0), s = build(p, o.hint), j = judge(s.A, s.choir, p, history);
+      const p = plan(o.genre, o.hint, (base + i * 7919) >>> 0), s = build(p, Object.assign({}, o.hint, { beat: o.beat })), j = judge(s.A, s.choir, p, history);
       if (!best || j.score > best.j.score) best = { p, s, j }; i++; if (onStep) onStep(i, n);
-      if (i < n) setTimeout(step, 20); else resolve(finish(best)); } catch (e) { reject(e); } }; setTimeout(step, 20); });
+      if (i < n) setTimeout(step, 20); else { const r = finish(best); r.beat = o.beat || 'gm'; resolve(r); } } catch (e) { reject(e); } }; setTimeout(step, 20); });
   }
   function finish(b) {
     const { p, s, j } = b, sg = s.s; let name = C.makeName(p.seed); for (let k = 1; k < 9; k++) { const w = name.toLowerCase().split(' ').filter((x) => x.length > 3); if (new Set(w).size === w.length) break; name = C.makeName(p.seed + k * 977); }
@@ -167,5 +177,5 @@
   }
   // what a dropped file says, turned into a genre, and a key and tempo when it has them
   async function hear(file) { const h = await listen(file); if (h.key !== undefined || /\.midi?$/i.test(file.name)) { try { const M = C.parseMidi(await file.arrayBuffer()); h.bpm = 60000000 / M.tempos[0].us; } catch (e) { /* no tempo */ } } return h; }
-  root.Anthem = { plan, compose, hear, fromText, GENRES, FEEL_GENRES };
+  root.Anthem = { plan, compose, hear, fromText, rebeat, BEATS, GENRES, FEEL_GENRES };
 })(typeof window !== 'undefined' ? window : globalThis);
