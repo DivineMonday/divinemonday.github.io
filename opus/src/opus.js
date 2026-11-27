@@ -7,6 +7,8 @@
   const hash = (bytes) => { let h = 2166136261; const n = Math.min(bytes.length, 1 << 20), step = Math.max(1, Math.floor(bytes.length / n)); for (let i = 0; i < bytes.length; i += step) { h ^= bytes[i]; h = Math.imul(h, 16777619); } return h >>> 0; };
   const strHash = (s) => hash(new TextEncoder().encode(String(s)));
   const MAJ = ['C', 'G', 'D', 'A', 'E', 'F', 'Bb', 'Eb', 'Ab'], MIN = ['a', 'e', 'b', 'd', 'g', 'c', 'f', 'f#'];
+  // always the same orchestra in the same order, so one Studio One template fits every piece
+  const TEMPLATE = Y.INST.map((i) => i.id).filter((id) => id !== 'pno');
   const FEELS = Object.keys(Y.FEELINGS), ERAS = Object.keys(Y.ERAS).filter((e) => Y.PRESETS[e]);
   const ERA_NAME = { baroque: 'Baroque', classical: 'Classical', romantic: 'Romantic', impressionist: 'Impressionist', modern: 'Modern', experimental: 'Experimental', pop: 'Pop' };
   const SLOT = { opener: ['sonata', 'overture', 'sonata'], slow: ['aria', 'variations', 'canon', 'aria'], dance: ['minuet', 'waltz', 'march', 'minuet'], finale: ['rondo', 'fugue', 'sonata', 'rondo'] };
@@ -67,9 +69,9 @@
   }
 
   function sketch(p) {
-    const g = Y.generate({ form: 'suite', era: p.era, key: p.key, len: p.len, seed: p.seed, chain: p.chain, feel: p.feel || undefined, inst: Y.PRESETS[p.era] });
+    const g = Y.generate({ form: 'suite', era: p.era, key: p.key, len: p.len, seed: p.seed, chain: p.chain, feel: p.feel || undefined, inst: TEMPLATE });
     const m = g.movements[0], bytes = Y.writeMidi(m, m.tracks.map((t) => t.id));
-    const choir = C.follow(bytes, { style: p.style, men: p.men, women: p.women, seed: p.seed ^ 0x5bd1e995 });
+    const choir = C.follow(bytes, { style: p.style, men: p.men, women: p.women, seed: p.seed ^ 0x5bd1e995, silence: 0.4 });
     return { m, bytes, choir, A: C.analyseMidi(bytes) };
   }
 
@@ -91,7 +93,7 @@
   }
   function finish(b) {
     const { p, s, j } = b, m = s.m; let name = C.makeName(p.seed); for (let k = 1; k < 9; k++) { const w = name.toLowerCase().split(' ').filter((x) => x.length > 3); if (new Set(w).size === w.length) break; name = C.makeName(p.seed + k * 977); }
-    const file = withChoir(s.bytes, s.choir, 'Choir (' + C.STYLES[p.style].name + ')');
+    const file = withChoir(s.bytes, s.choir, 'Choir');
     const secs = Math.round(s.choir.seconds), fe = p.feel ? Y.FEELINGS[p.feel].name : null;
     const parts = (m.markers || []).filter((x) => /^\d+\. /.test(x.text)).map((x) => ({ t: x.t, text: x.text.replace(/^\d+\. /, '') }));
     const who = p.men && p.women ? 'men and women' : p.men ? 'men' : 'women';
