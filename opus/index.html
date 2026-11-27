@@ -3091,7 +3091,7 @@ else root.SYM = Y;
       const inS = merged.filter((x) => x.t >= s.from * barT - 30 && x.t < s.to * barT);
       const mIn = men && inS.some((x) => x.voice === 'T' || x.voice === 'B'), wIn = women && inS.some((x) => x.voice === 'S' || x.voice === 'A');
       strip.push({ label: s.label, start: s.from * barT / PPQ, beats: (s.to - s.from) * barT / PPQ, men: mIn, women: wIn, role: ROLE_TEXT[s.role] });
-      markers.push({ t: s.from * barT, text: s.label + ' · ' + ROLE_TEXT[s.role] + (s.start > s.from ? ', from bar ' + (s.start + 1) : '') });
+      markers.push({ t: s.from * barT, text: s.label + ' · ' + (o.song && s.role === 'rest' ? 'the band alone' : ROLE_TEXT[s.role]) + (s.start > s.from ? ', from bar ' + (s.start + 1) : '') });
       // the swell: one arch per four bars, never pumping bar by bar
       const mul = s.role === 'rest' ? 0 : s.role === 'tutti' || s.role === 'finale' ? 1 : s.role === 'padHigh' ? 0.6 : 0.8;
       for (let t = s.from * barT; t < s.to * barT; t += PPQ / 2) { const ph = 4 * barT, x = ((t - s.start * barT) % ph + ph) % ph / ph, arch = Math.sin(Math.PI * Math.min(1, x * 0.8 + 0.1));
