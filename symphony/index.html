@@ -579,10 +579,41 @@ const RH = {
   },
 };
 const K7RH = { 4: [[1, 1, 1, 1], [2, 1, 1], [1, .5, .5, 1, 1], [1.5, .5, 1, 1]], 3: [[1, 1, 1], [2, 1], [1, .5, .5, 1]] };
-function rhPool(meter, ch, era) {
+// every era moves its tune its own way: how far it leaps, which shapes it likes, which rhythms it speaks in
+const DNA = {
+  baroque: { kinds: ['seq', 'zig', 'bro', 'arp', 'leap', 'seq'], kindsB: ['seq', 'down', 'bro', 'zig'], leapMul: .9, wm: 3.4, noise: 1.4, leap: 7, wiggle: 5, ends: ['fall', 'fall', 'turn'],
+    rh: { 4: [[.5, .5, 1, .5, .5, 1], [.25, .25, .5, 1, 2], [1, .5, .5, 1, 1]], 3: [[.5, .5, .5, .5, 1], [1, .5, .5, 1]] }, near: ['classical'] },
+  classical: { kinds: ['leap', 'arch', 'turn', 'arp', 'up', 'leap'], kindsB: ['down', 'arch', 'turn', 'nb'], leapMul: 1, wm: 3.4, noise: 1.5, leap: 7, wiggle: 6, ends: ['fall', 'rise', 'turn'],
+    rh: { 4: [[1, .5, .5, 2], [.5, .5, 1, 2], [2, .5, .5, 1], [1, 1, 2]], 3: [[1, .5, .5, 1], [2, .5, .5]] }, near: ['baroque', 'romantic', 'pop'] },
+  romantic: { kinds: ['sigh', 'surge', 'leap', 'sigh', 'arch'], kindsB: ['sigh', 'down', 'surge', 'arch'], leapMul: .6, wm: 3.8, noise: 1.7, leap: 9, upLeap: 1.4, wiggle: 8, ends: ['rise', 'leapfall', 'fall', 'turn'],
+    rh: { 4: [[3, 1], [2.5, .5, 1], [1, 2, 1], [2, 1.5, .5], [1, 1, 2]], 3: [[2.5, .5], [1, 2], [2, .5, .5]] }, near: ['classical', 'impressionist'] },
+  impressionist: { kinds: ['penta', 'float', 'arch', 'penta', 'down'], kindsB: ['float', 'penta', 'arch'], leapMul: .85, wm: 3.6, noise: 1.8, leap: 8, wiggle: 8, avoidW: 16, ends: ['float', 'rise', 'leapfall'],
+    rh: { 4: [[1.5, 1.5, 1], [1, 2, 1], [3, 1], [2 / 3, 2 / 3, 2 / 3, 2], [2, 2 / 3, 2 / 3, 2 / 3]], 3: [[1.5, 1.5], [2 / 3, 2 / 3, 2 / 3, 1], [1, 2]] }, near: ['romantic', 'modern'] },
+  modern: { kinds: ['quart', 'jag', 'quart', 'leap', 'rep'], kindsB: ['jag', 'quart', 'down'], leapMul: .5, wm: 4, noise: 2, leap: 10, wiggle: 9, ends: ['leapfall', 'rise', 'float'],
+    rh: { 4: [[.5, 1, .5, 1, 1], [1, .5, 1, 1.5], [.75, .75, .5, 2], [.5, .5, 1, .5, 1.5]], 3: [[.5, 1, 1.5], [1, .5, 1.5], [.75, .75, 1.5]] }, near: ['impressionist', 'experimental'] },
+  experimental: { kinds: ['pt', 'pt', 'jag', 'quart'], kindsB: ['pt', 'float', 'jag'], leapMul: .3, wm: 4.2, noise: 2.4, leap: 12, wiggle: 9, ends: ['leapfall', 'float', 'rise'],
+    rh: { 4: [[.25, .75, 1.5, 1.5], [2, .25, .25, 1.5], [1, 3], [.5, 2.5, 1]], 3: [[.25, .75, 2], [2, 1], [.5, 2.5]] }, near: ['modern'] },
+  pop: { kinds: ['rep', 'hook', 'arch', 'rep', 'leap'], kindsB: ['hook', 'down', 'rep', 'arch'], leapMul: .8, wm: 3.8, noise: 1.6, leap: 8, wiggle: 7, ends: ['rise', 'fall', 'float'],
+    rh: { 4: [[.5, 1, .5, 1, 1], [1.5, 1.5, 1], [.5, .5, .5, 1, 1.5], [1, .5, 1, 1.5], [.5, 1, .5, 2]], 3: [[.5, 1, 1.5], [1.5, 1.5], [1, .5, 1.5]] }, near: ['classical', 'romantic'] },
+};
+Y.DNA = DNA;
+// a piece takes the DNA of its era, and now and then borrows what fits from a neighbour
+function blendDNA(era, seed) {
+  const r = mkRng(strH(seed + ':dna')), A = DNA[era] || DNA.classical, d = Object.assign({}, A, { era, kinds: A.kinds.slice(), kindsB: A.kindsB.slice(), ends: A.ends.slice(), rh: { 4: A.rh[4].slice(), 3: A.rh[3].slice() } });
+  if (r() < .45) {
+    const nb = pick(r, A.near), B = DNA[nb]; d.borrow = nb;
+    d.kindsB = d.kindsB.concat(B.kindsB, B.kinds.slice(0, 2)); d.kinds.push(pick(r, B.kinds)); d.ends.push(pick(r, B.ends));
+    d.rh[4] = d.rh[4].concat(B.rh[4].slice(0, 2)); d.rh[3] = d.rh[3].concat(B.rh[3].slice(0, 1));
+    for (const k of ['leapMul', 'wm', 'noise']) d[k] = A[k] * .75 + B[k] * .25; d.leap = Math.max(A.leap, B.leap - 1);
+  }
+  return d;
+}
+function rhPool(meter, ch, era, dna) {
   if (era === 'baroque' && ch === 'brisk') ch = 'motor';
   const P = RH[meter];
-  return P[ch] || (ch === 'march' || ch === 'dotted' ? P.dance || P.brisk : ch === 'waltz' || ch === 'dance' ? P.lyr : P.brisk);
+  const base = P[ch] || (ch === 'march' || ch === 'dotted' ? P.dance || P.brisk : ch === 'waltz' || ch === 'dance' ? P.lyr : P.brisk);
+  if (!dna || ch === 'motor' || ch === 'march' || !dna.rh[meter]) return base;
+  return base.concat(dna.rh[meter], dna.rh[meter]); // the era's own rhythms weigh double
 }
 function contour(n, r, kind, era) {
   const st = [];
@@ -598,9 +629,19 @@ function contour(n, r, kind, era) {
       case 'seq': s = i % 2 ? -1 : 2; break;            // a sequence: up a third, down a step
       case 'zig': s = i % 3 === 0 ? 3 : -1; break;      // a fourth up, then stepping back down
       case 'bro': s = i % 4 === 3 ? -4 : 2; break;      // a broken chord that falls back
+      case 'sigh': s = i === 0 ? pick(r, [4, 5, 5, 3]) : -1; break;   // a big leap up, then sinking back
+      case 'surge': s = i < n - 2 ? pick(r, [1, 1, 2]) : i === n - 2 ? pick(r, [3, 4]) : -1; break; // climbing, a last leap, a fall
+      case 'turn': s = [1, -1, -1, 1][i % 4]; break;    // the galant turn around a note
+      case 'penta': s = pick(r, [2, -2, 3, -2, 1, -3]); break;        // wide, open, few half steps
+      case 'float': s = i % 3 === 1 ? 0 : pick(r, [1, -1, 2, -2]); break; // a tone that hovers before it moves
+      case 'quart': s = pick(r, [3, -3, 3, 1, -1, -4]); break;        // fourths, the modern sound
+      case 'jag': s = (i % 2 ? -1 : 1) * pick(r, [2, 3, 4, 5]); break;   // zigzag over wide intervals
+      case 'pt': s = pick(r, [5, -4, 6, -5, 3, -6, 2]); break;        // points of light, far apart
+      case 'rep': s = i % 3 === 2 ? pick(r, [2, -2, 1]) : 0; break;    // a repeated note that sticks
+      case 'hook': s = [0, 1, -1, 2][i % 4] * (i > 3 ? -1 : 1); break;  // a short hook you can hum
       default: s = pick(r, [1, -1]);
     }
-    if (kind !== 'leap' || i > 0) { if (r() < .26) s *= 2; if (r() < .07) s = 0; }
+    if (!['leap', 'sigh', 'surge', 'pt', 'quart', 'jag', 'rep', 'hook'].includes(kind) || (kind === 'leap' && i > 0)) { if (r() < .26) s *= 2; if (r() < .07) s = 0; }
     if (era === 'baroque' && Math.abs(s) === 1 && r() < .22) s = Math.sign(s) * pick(r, [3, 4, 5]);
     st.push(s);
   }
@@ -627,11 +668,13 @@ function line(sk, o) {
         let c = s.c;
         if (n.goal && !n.goal.has(pc)) c += 90;
         if (n.strong && !ct) c += o.appog ? 16 : 45;
-        if (o.avoid && !ct && o.avoid.has(mod(pc - ev.K.t, 12))) c += 6;
+        if (o.avoid && !ct && o.avoid.has(mod(pc - ev.K.t, 12))) c += o.avoidW || 6;
         if (s.D == null || s.m == null) c += Math.abs(m - (o.start || o.center)) * 0.25;
         else {
           const dD = D - s.D, ad = Math.abs(dD), sm = m - s.m;
-          c += ad < 8 ? ICOST[ad] : 14;
+          c += ad < 8 ? (ad >= 2 ? ICOST[ad] * (o.leapMul || 1) : ICOST[ad]) : 14 * (o.leapMul || 1);
+          if (o.upLeap && dD >= 3) c -= o.upLeap;
+          if (o.wiggle && ad && ad <= 2 && s.st === -dD && s.path && s.path.st === dD) c += o.wiggle; // no ping pong
           if (n.want != null) c += (o.wm || 2.5) * Math.abs(dD - n.want);
           if (!ct && !n.strong && ad !== 1) c += 30;
           if (s.nct && ad !== 1) c += 26;
@@ -1308,16 +1351,18 @@ function getTheme(c, id, ch, r) {
   if (!th.A) {
     th.char = th.char || ch;
     const ch2 = th.char;
-    const pool = rhPool(c.meter, ch2, x.era);
-    const calm = rhPool(c.meter, ch2 === 'brisk' || ch2 === 'motor' || ch2 === 'march' ? (ch2 === 'march' ? 'march' : 'lyr') : ch2 === 'lyr' ? 'slow' : ch2, x.era);
+    const dna = c.dna;
+    const pool = rhPool(c.meter, ch2, x.era, dna);
+    const calm = rhPool(c.meter, ch2 === 'brisk' || ch2 === 'motor' || ch2 === 'march' ? (ch2 === 'march' ? 'march' : 'lyr') : ch2 === 'lyr' ? 'slow' : ch2, x.era, dna);
+    const same = (a, b) => a && b && a.join() === b.join();
     const A = pick(r, pool);
-    let B = pick(r, A.length >= 4 ? calm : pool); if (B === A) B = pick(r, calm);
-    const C = pick(r, pool);
+    let B = pick(r, A.length >= 4 ? calm : pool); for (let k = 0; k < 6 && same(B, A); k++) B = pick(r, calm.concat(pool));
+    let C = pick(r, pool); for (let k = 0; k < 6 && (same(C, A) || same(C, B)); k++) C = pick(r, pool);
     const bq = x.era === 'baroque';
-    const ka = ch2 === 'march' ? pick(r, bq ? ['arp', 'zig', 'bro'] : ['arp', 'leap', 'up']) : pick(r, bq ? ['seq', 'zig', 'bro', 'arp', 'leap'] : ['leap', 'leap', 'arp', 'arch', 'nb', 'up']);
+    const ka = ch2 === 'march' ? pick(r, bq ? ['arp', 'zig', 'bro'] : ['arp', 'leap', 'up']) : pick(r, dna ? dna.kinds : bq ? ['seq', 'zig', 'bro', 'arp', 'leap'] : ['leap', 'leap', 'arp', 'arch', 'nb', 'up']);
     th.A = { rh: A, st: contour(A.length, r, ka, x.era) };
-    th.B = { rh: B, st: contour(B.length, r, pick(r, bq ? ['seq', 'down', 'bro', 'zig'] : ['down', 'arch', 'leap', 'arp', 'nb']), x.era) };
-    th.C = { rh: C, st: contour(C.length, r, pick(r, bq ? ['seq', 'zig', 'arp', 'bro'] : ['up', 'arp', 'leap', 'arch']), x.era) };
+    th.B = { rh: B, st: contour(B.length, r, pick(r, dna ? dna.kindsB : bq ? ['seq', 'down', 'bro', 'zig'] : ['down', 'arch', 'leap', 'arp', 'nb']), x.era) };
+    th.C = { rh: C, st: contour(C.length, r, pick(r, dna ? dna.kinds.concat(dna.kindsB) : bq ? ['seq', 'zig', 'arp', 'bro'] : ['up', 'arp', 'leap', 'arch']), x.era) };
   }
   return th;
 }
@@ -1334,7 +1379,7 @@ function planMel(c, ph, r) {
   const roles = rolesFor(sp.type || 'free', ph.tpl.length, sp.cad);
   const g1 = new Set([dpc(K, 0)]), g3 = new Set([dpc(K, 2)]), g27 = new Set([dpc(K, 1), mod(K.t + 11, 12)]), gH = new Set([dpc(K, 1), dpc(K, 4), mod(K.t + 11, 12)]);
   const seq = r() < .6 ? -1 : 1;
-  const sk = [];
+  const sk = []; let endK = 'fall';
   let prevSum = 0;
   roles.forEach((role, bi) => {
     const tb = ph.t0 + bi * BAR;
@@ -1345,14 +1390,18 @@ function planMel(c, ph, r) {
       case 'C': cell = th.C; break;
       case 'F': {
         const h = halfCell(th.A, meter);
-        if (h) cell = { rh: h.rh.concat(h.rh), st: h.st.concat([seq - sum(h.st)], h.st) };
+        const dev = pick(r, ['seq', 'seq', 'inv', 'ret', 'aug']);
+        if (h && dev === 'aug') cell = { rh: h.rh.map(d => d * 2), st: h.st.slice() };
+        else if (h) { const st2 = dev === 'inv' ? h.st.map(x => -x) : dev === 'ret' ? h.st.slice().reverse().map(x => -x) : h.st; cell = { rh: h.rh.concat(h.rh), st: h.st.concat([seq - sum(h.st)], st2) }; }
         else cell = th.A;
         lead = bi ? seq - prevSum : null;
         if (h) lead = bi ? seq - sum(h.st) - (seq - sum(h.st)) + seq - prevSum : null;
         break;
       }
-      case 'K7': { const rh = pick(r, K7RH[meter]); cell = { rh, st: rh.slice(1).map(() => -1) }; gL = g27; if (ERAS[c.x.era].trill && rh[rh.length - 1] >= 1 && (sp.type === 'cons' || sp.type === 'sent' || sp.cad === 'PAC')) orn = rh.length - 1; break; }
-      case 'K8': cell = { rh: [2], st: [] }; gF = sp.cad === 'IAC' ? g3 : g1; lead = -1; break;
+      case 'K7': { const rh = pick(r, K7RH[meter]); endK = c.dna ? pick(r, c.dna.ends) : 'fall'; const nS = rh.length - 1;
+        const st = endK === 'rise' ? rh.slice(1).map((_, i) => (i === nS - 1 ? -2 : -1)) : endK === 'turn' ? rh.slice(1).map((_, i) => [1, -1, -1, -1][i % 4]) : endK === 'leapfall' ? rh.slice(1).map((_, i) => (i === 0 ? 3 : -1)) : endK === 'float' ? rh.slice(1).map((_, i) => (i % 2 ? 0 : 1)) : rh.slice(1).map(() => -1);
+        cell = { rh, st }; gL = g27; if (ERAS[c.x.era].trill && rh[rh.length - 1] >= 1 && (sp.type === 'cons' || sp.type === 'sent' || sp.cad === 'PAC')) orn = rh.length - 1; break; }
+      case 'K8': cell = { rh: [2], st: [] }; gF = sp.cad === 'IAC' || (endK === 'float' && sp.type !== 'close' && sp.type !== 'cons') ? g3 : g1; lead = endK === 'rise' ? 1 : endK === 'float' ? null : -1; break;
       case 'H8': cell = { rh: [meter === 3 ? 2 : 3], st: [] }; gF = gH; break;
       case 'HOLD': cell = { rh: [meter], st: [] }; gF = g1; break;
       case 'FA': { const rh = pick(r, RH[4].march); cell = { rh, st: contour(rh.length, r, 'arp') }; break; }
@@ -1472,7 +1521,8 @@ function genMel(c) {
       }
       const pv = head.length ? head[head.length - 1] : last;
       const o = { lo: st.melLo, hi: st.melHi, center: st.melC, half: 8, prevD: pv ? pv.D : null, prevM: pv ? pv.m : null, prevT: pv ? pv.t : null, start: st.melC, fixed: [c.bassCheck], r, noise: 1.1, wm: 3.2, appog: st.appog && ph.char === 'lyr', avoid: st.avoid };
-      if (sp.type === 'cadenza') { o.wm = 4; }
+      const dn = c.dna; if (dn) { o.leapMul = dn.leapMul; o.wm = dn.wm; o.noise = dn.noise; o.leap = dn.leap; o.upLeap = dn.upLeap; o.wiggle = dn.wiggle; o.avoidW = dn.avoidW; }
+      if (sp.type === 'cadenza') { o.wm = Math.max(o.wm, 4); }
       o.peak = { t0: ph.t0, t1: ph.t1 };
       notes = head.concat(sk.length ? line(sk, o) : []);
       if (sp.id && !sp.head && !(c.themes[sp.id] && c.themes[sp.id].notes)) storeTheme(c, sp.id, ph, notes, ph.stretch);
@@ -2345,6 +2395,7 @@ function compose(o) {
   const c = new Comp(x);
   const st = ERAS[era];
   c.style = { melLo: st.melLo, melHi: st.melHi, melC: st.melC, appog: st.appog, avoid: st.avoid ? new Set(st.avoid) : null, bLo: 36, bHi: 57, bC: 46 };
+  c.dna = blendDNA(era, seed);
   F[form](c, x);
   journey(c, x, o);
   shapeDyn(c);
@@ -2596,7 +2647,7 @@ function drawFeels() {
       if (id) {
         S.era = fe.era; store.set('era', S.era);
         S.inst = new Set((fe.preset || Y.PRESETS[fe.era]).concat(S.bfo ? fe.bfo : [])); store.set('inst', [...S.inst]);
-        S.key = fe.keys[0]; store.set('key', S.key); $('key').value = S.key;
+        S.key = feelKey(fe); store.set('key', S.key); $('key').value = S.key;
         if (S.form !== 'suite' && !fe.forms.includes(S.form)) { S.form = fe.forms[0]; store.set('form', S.form); }
       }
       S.tempo = null; drawFeels(); drawEras(); drawForms(); syncOpts(); drawHall();
@@ -2626,7 +2677,7 @@ function surprise(choice) {
   S.feel = fid; store.set('feel', fid);
   S.era = Math.random() < .7 ? fe.era : R(Object.keys(Y.ERAS)); store.set('era', S.era);
   S.inst = new Set((fe.preset && S.era === fe.era ? fe.preset : Y.PRESETS[S.era]).concat(S.bfo ? fe.bfo : [])); store.set('inst', [...S.inst]);
-  S.key = R(fe.keys); store.set('key', S.key); $('key').value = S.key;
+  S.key = feelKey(fe); store.set('key', S.key); $('key').value = S.key;
   S.mvFeels = null;
   // a few musicians and maybe the conductor under an influence; most stay clean so it holds together
   { const ids = Y.INFL.map(i => i.id).filter(k => k !== 'clean'); S.inf = {};
@@ -2677,6 +2728,7 @@ function drawForms() {
     $('forms').appendChild(b);
   });
 }
+const feelKey = (fe) => { const pool = KEYS.map(k => k[0]).filter(k => (fe.mode === 'm') === (k === k.toLowerCase())); return Math.random() < .4 || !pool.length ? fe.keys[Math.floor(Math.random() * fe.keys.length)] : pool[Math.floor(Math.random() * pool.length)]; };
 const KEYS = [['C', 'C major'], ['G', 'G major'], ['D', 'D major'], ['A', 'A major'], ['E', 'E major'], ['F', 'F major'], ['Bb', 'B♭ major'], ['Eb', 'E♭ major'], ['Ab', 'A♭ major'], ['a', 'A minor'], ['e', 'E minor'], ['b', 'B minor'], ['d', 'D minor'], ['g', 'G minor'], ['c', 'C minor'], ['f', 'F minor'], ['f#', 'F♯ minor']];
 function setTarget(v) {
   S.target = v; store.set('target', v);
@@ -2896,7 +2948,7 @@ function drawOcc() {
 function applyOcc(o) {
   const fe = Y.FEELINGS[o[5]];
   S.form = o[3]; S.feel = o[5]; S.arc = o[4]; S.mvFeels = null; S.tempo = null;
-  if (fe) { S.key = fe.keys[0]; $('key').value = S.key; }
+  if (fe) { S.key = feelKey(fe); $('key').value = S.key; }
   store.set('form', S.form); store.set('feel', S.feel); store.set('key', S.key); store.set('arc', S.arc);
 }
 function pickOcc(id) {
