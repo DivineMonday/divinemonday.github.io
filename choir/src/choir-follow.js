@@ -7,7 +7,6 @@
   const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
   const NOTE = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
   const rng = (seed) => { let s = (seed >>> 0) || 1; return () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
-  const MODES = { sing: 'Sing along', answer: 'Answer', carry: 'Carry' };
 
   // ---------- read a MIDI file ----------
   function parse(bytes) {
@@ -17,7 +16,7 @@
     if (String.fromCharCode(b[0], b[1], b[2], b[3]) !== 'MThd') throw new Error('This is not a MIDI file.');
     i = 4; const hl = u32(), fmt = u16(), ntr = u16(), div = u16(); i = 8 + hl;
     if (div & 0x8000) throw new Error('This MIDI uses SMPTE time; save it with beats and bars.');
-    const f = PPQ / div, notes = [], tempos = [], sigs = [];
+    const f = PPQ / div, notes = [], tempos = [], sigs = [], marks = [];
     for (let k = 0; k < ntr && i < b.length; k++) {
       while (i < b.length && String.fromCharCode(b[i], b[i + 1], b[i + 2], b[i + 3]) !== 'MTrk') i++;
       if (i >= b.length) break; i += 4; const len = u32(), end = i + len; let t = 0, rs = 0; const open = {};
@@ -27,6 +26,7 @@
         if (st === 0xff) { const ty = b[i++], l = vlq(), d = b.subarray(i, i + l); i += l;
           if (ty === 0x51 && l === 3) tempos.push({ t: Math.round(t * f), us: (d[0] << 16) | (d[1] << 8) | d[2] });
           if (ty === 0x58 && l >= 2) sigs.push({ t: Math.round(t * f), num: d[0], den: 1 << d[1] });
+          if ((ty === 0x06 || ty === 0x01) && l > 0 && l < 80) { try { marks.push({ t: Math.round(t * f), text: decodeURIComponent(escape(String.fromCharCode.apply(null, d))) }); } catch (e) { marks.push({ t: Math.round(t * f), text: String.fromCharCode.apply(null, d) }); } }
           if (ty === 0x2f) break; continue; }
         if (st === 0xf0 || st === 0xf7) { i += vlq(); continue; }
         rs = st; const hi = st & 0xf0, ch = st & 15;
@@ -38,7 +38,7 @@
       i = end;
     }
     notes.sort((a, b2) => a.t - b2.t || a.p - b2.p); tempos.sort((a, b2) => a.t - b2.t);
-    return { fmt, notes, tempos: tempos.length ? tempos : [{ t: 0, us: 500000 }], sig: sigs.sort((a, b2) => a.t - b2.t)[0] || { num: 4, den: 4 } };
+    return { fmt, notes, marks, tempos: tempos.length ? tempos : [{ t: 0, us: 500000 }], sig: sigs.sort((a, b2) => a.t - b2.t)[0] || { num: 4, den: 4 } };
   }
 
   const KMAJ = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88], KMIN = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
@@ -110,65 +110,121 @@
   const intoRange = (p, lo, hi, near) => { let x = p; while (x < lo) x += 12; while (x > hi) x -= 12; if (near != null) { if (x - 12 >= lo && Math.abs(x - 12 - near) < Math.abs(x - near)) x -= 12; if (x + 12 <= hi && Math.abs(x + 12 - near) < Math.abs(x - near)) x += 12; } return clamp(x, lo, hi); };
   const snapTo = (p, pcs) => { for (let d = 0; d < 7; d++) { if (pcs.includes(((p + d) % 12 + 12) % 12)) return p + d; if (pcs.includes(((p - d) % 12 + 12) % 12)) return p - d; } return p; };
 
-  // ---------- the choir joins ----------
-  function follow(bytes, o) {
-    o = o || {}; const Z = Object.assign({}, C.ZONES, o.zones || {}), mode = MODES[o.mode] ? o.mode : 'carry';
-    let men = o.men !== false, women = o.women !== false; if (!men && !women) men = women = true;
-    const M = parse(bytes); if (o.segT) M.segT = o.segT; const A = analyse(M), R = rng(o.seed || 7), ri = (a, b) => a + Math.floor(R() * (b - a + 1));
-    const phraseBars = A.bars > 40 ? 4 : 2, out = [];
-    const add = (t, d, p, v, vc, lead) => { if (d > 30) out.push({ t: Math.round(t), d: Math.round(d), p, v, voice: vc, lead: !!lead }); };
-    const segAt = (t) => A.segs[Math.floor(t / A.segT)];
-    const breathEnd = (t, end) => { const pb = phraseBars * A.barT, nb = (Math.floor(t / pb) + 1) * pb; return end > nb - 60 ? nb - 90 : end; };
-    // which group sings in which bar
-    const both = men && women; let groups = [];
-    const rgFull = rangesFor(Z, men, women), rgMen = rangesFor(Z, true, false), rgWom = rangesFor(Z, false, true);
-    // chord blocks: same chord joined, split at breaths
-    const blocks = (fromBar, toBar) => { const r = []; for (let s = Math.floor(fromBar * A.barT / A.segT); s < Math.ceil(toBar * A.barT / A.segT); s++) { const ch = A.segs[s]; if (!ch) continue; const t = s * A.segT, last = r[r.length - 1], pb = phraseBars * A.barT;
-      if (last && last.ch.root === ch.root && last.ch.q === ch.q && last.t + last.d === t && Math.floor(t / pb) === Math.floor(last.t / pb)) last.d += A.segT; else r.push({ t, d: A.segT, ch }); } return r; };
-    const sing = (blk, rg, top) => { let prev = null; for (const b of blk) { const v = voice(b.ch, rg, prev, top ? top(b) : null); prev = v; v.forEach((p, k) => add(b.t, breathEnd(b.t, b.t + b.d) - b.t - 20, p, (A.dyn[Math.floor(b.t / A.barT)] || 0.4) * (k === 0 ? 0.95 : 0.85), rg[k][0])); } };
+  // ---------- the choir joins: it hears the story of the orchestra and tells its own along with it ----------
+  const ROLE_TEXT = { rest: 'the orchestra alone', pad: 'held chords', padHigh: 'women hold, high and soft', padLow: 'men hold, low and dark', tune: 'the choir sings the tune', unison: 'the tune in octaves', answer: 'the choir answers', canon: 'canon, the men follow', call: 'a leader calls, the choir answers', stabs: 'rhythm on the chords', drone: 'men drone, women chant', tutti: 'everyone, full voice', finale: 'finale, the last chord held' };
+  const POOLS = {
+    film: ['padHigh', 'padLow', 'unison', 'answer', 'pad', 'tune', 'padHigh'],
+    gospel: ['call', 'stabs', 'pad', 'call', 'tune'],
+    baroque: ['tune', 'pad', 'answer', 'canon', 'stabs'],
+    polyphony: ['canon', 'pad', 'answer', 'padHigh', 'tune'],
+    gregorian: ['unison', 'drone', 'answer', 'unison', 'padLow']
+  };
+  const MODES = { story: 'Story' };
 
-    if (mode === 'carry') {
-      sing(blocks(0, A.bars), rgFull);
-      groups = Array.from({ length: A.bars }, () => ({ men, women }));
-    } else if (mode === 'sing') {
-      const topR = rgFull[0]; let near = (topR[1] + topR[2]) >> 1; const melIn = [];
-      for (const n of A.mel) { const p = intoRange(n.p, topR[1], topR[2], near); near = p; melIn.push({ t: n.t, d: n.d, p }); }
-      for (const n of melIn) add(n.t, breathEnd(n.t, n.t + n.d) - n.t - 10, n.p, A.dyn[Math.floor(n.t / A.barT)] || 0.5, topR[0], true);
-      const lower = rgFull.slice(1);
-      // under the tune the others hold the chord; where the tune rests, everyone sings the chord
-      const blk = blocks(0, A.bars); let prev = null;
-      for (const b of blk) {
-        const inBlk = melIn.filter((n) => n.t < b.t + b.d && n.t + n.d > b.t), lowMel = inBlk.length ? Math.min(...inBlk.map((n) => n.p)) : null;
-        const rg = inBlk.length ? lower : rgFull; if (!rg.length) continue;
-        const capped = rg.map(([nm, lo, hi]) => [nm, lo, lowMel != null ? Math.max(lo, Math.min(hi, lowMel - 3)) : hi]);
-        const v = voice(b.ch, capped, prev && prev.length === capped.length ? prev : null); prev = v;
-        v.forEach((p, k) => add(b.t, breathEnd(b.t, b.t + b.d) - b.t - 20, p, (A.dyn[Math.floor(b.t / A.barT)] || 0.4) * 0.8, capped[k][0]));
+  function follow(bytes, o) {
+    o = o || {}; const Z = Object.assign({}, C.ZONES, o.zones || {}), style = POOLS[o.style] ? o.style : 'film';
+    let men = o.men !== false, women = o.women !== false; if (!men && !women) men = women = true; const both = men && women;
+    const M = parse(bytes), A = analyse(M), R = rng(o.seed || 7), pick = (a) => a[Math.floor(R() * a.length)], chance = (p) => R() < p;
+    const barT = A.barT, bars = A.bars, out = [];
+    const add = (t, d, p, v, vc, lead) => { t = Math.round(t); d = Math.round(d); if (d > 40 && t < A.endT) out.push({ t, d: Math.min(d, A.endT + barT - t), p, v: clamp(v, 0.08, 1), voice: vc, lead: !!lead }); };
+    const chAt = (t) => A.segs[Math.floor(t / A.segT)];
+    const color = (ch) => { if (!ch) return ch; const pcs = ch.pcs.slice(), r = ch.root;
+      if (style === 'gospel') { if (ch.q === '' && r === (A.tonic + 7) % 12) pcs.push((r + 10) % 12); else if (ch.q === 'm') pcs.push((r + 10) % 12); else if (ch.q === '') pcs.push((r + 2) % 12); }
+      if (style === 'film' && ch.q !== 'dim' && chance(0.3)) pcs.push((r + 2) % 12);
+      return { root: r, q: ch.q, pcs }; };
+
+    // ----- the sections of the orchestra: its own markers, or blocks of bars -----
+    let secs = [];
+    const mk = []; for (const m of M.marks.slice().sort((a, b) => a.t - b.t)) { const bar = Math.round(m.t / barT), text = m.text.replace(/\s+/g, ' ').trim(); if (!text || bar >= bars - 1) continue; const last = mk[mk.length - 1]; if (last && (last.bar === bar || last.text === text)) continue; mk.push({ bar, text }); }
+    if (mk.length >= 2) { if (mk[0].bar > 0) mk.unshift({ bar: 0, text: 'Opening' }); mk.forEach((m, k) => secs.push({ from: m.bar, to: k + 1 < mk.length ? mk[k + 1].bar : bars, label: m.text })); }
+    else { const L = bars >= 48 ? 8 : 4; for (let b = 0; b < bars; b += L) secs.push({ from: b, to: Math.min(bars, b + L), label: 'Bars ' + (b + 1) + ' to ' + Math.min(bars, b + L) }); }
+    secs = secs.filter((s) => s.to > s.from); for (let k = secs.length - 1; k > 0; k--) if (secs[k].to - secs[k].from < 2) { secs[k - 1].to = secs[k].to; secs.splice(k, 1); }
+    if (secs.length > 1 && secs[0].to - secs[0].from < 3) { secs[1].from = 0; secs.shift(); }
+    // a long section is two chapters
+    const split = []; for (const s of secs) { if (s.to - s.from >= 20) { const h = s.from + Math.round((s.to - s.from) / 8) * 4; split.push({ from: s.from, to: h, label: s.label }, { from: h, to: s.to, label: s.label + ', later' }); } else split.push(s); } secs = split;
+    for (const s of secs) { const d = A.dyn.slice(s.from, s.to), c = A.melCover.slice(s.from, s.to); s.dyn = d.reduce((a, x) => a + x, 0) / d.length || 0; s.cover = c.reduce((a, x) => a + x, 0) / c.length || 0;
+      const sg = A.segs.slice(Math.floor(s.from * barT / A.segT), Math.ceil(s.to * barT / A.segT)).filter(Boolean); s.minor = sg.length ? sg.filter((x) => x.q !== '').length / sg.length > 0.55 : false; }
+
+    // ----- the story: silence first, a climax where the orchestra is strongest, a held last chord -----
+    const n = secs.length, roles = new Array(n).fill(null);
+    let cl = n - 1; if (n >= 3) { let best = -1; for (let k = Math.floor(n * 0.4); k < n - 1; k++) { const sc = secs[k].dyn + 0.25 * k / (n - 1); if (sc > best) { best = sc; cl = k; } }
+      if (secs[n - 2].label === secs[n - 1].label.replace(', later', '')) cl = n - 2; }
+    roles[n - 1] = 'finale'; if (cl < n - 1) roles[cl] = 'tutti';
+    if (n >= 4) roles[0] = 'rest'; else if (!roles[0]) roles[0] = both ? 'padHigh' : 'pad';
+    let rested = n < 4;
+    for (let k = 1; k < n; k++) { if (roles[k]) continue;
+      const s = secs[k], c = POOLS[style].slice();
+      if (s.minor) c.push(both ? 'padLow' : 'pad', both ? 'padLow' : 'pad', style === 'gospel' ? 'pad' : 'unison');
+      if (s.dyn < 0.45) c.push('padHigh', 'pad'); if (s.cover < 0.35) c.push('answer', 'answer');
+      if (k === cl - 1) c.push(style === 'gospel' ? 'stabs' : 'tune', 'tune');
+      const fresh = c.filter((x) => x !== roles[k - 1] && x !== roles[k - 2]); let r = pick(fresh.length ? fresh : c.filter((x) => x !== roles[k - 1])) || 'pad';
+      if (!rested && n >= 6 && k >= 3 && k < cl - 1 && roles[k - 1] !== 'rest' && chance(0.3)) { r = 'rest'; rested = true; }
+      roles[k] = r; }
+    const fit = (r) => { if (both) return r; if (men) return { padHigh: 'pad', padLow: 'pad', canon: 'tune', drone: 'unison' }[r] || r; return { padLow: 'pad', drone: 'unison', canon: 'tune' }[r] || r; };
+    secs.forEach((s, k) => { s.role = fit(roles[k]); s.start = s.from; if (['pad', 'padHigh', 'padLow', 'unison', 'tune'].includes(s.role) && s.to - s.from >= 12 && k > 0 && chance(0.35)) s.start = s.from + Math.floor((s.to - s.from) / 8) * 4; });
+
+    // ----- the voices -----
+    const rgFull = rangesFor(Z, men, women), rgMen = rangesFor(Z, true, false), rgWom = rangesFor(Z, false, true);
+    const phraseOf = (t, from) => Math.floor((t - from * barT) / (4 * barT));
+    const blocksIn = (from, to) => { const r = []; for (let s = Math.floor(from * barT / A.segT); s < Math.ceil(to * barT / A.segT); s++) { const ch = A.segs[s]; if (!ch) continue; const t = s * A.segT, last = r[r.length - 1];
+      if (last && last.ch.root === ch.root && last.ch.q === ch.q && last.t + last.d === t && phraseOf(t, from) === phraseOf(last.t, from)) last.d += A.segT; else r.push({ t, d: A.segT, ch: color(ch) }); } return r; };
+    // held chords: a note that stays in the next chord is held, not sung again; a breath only where the phrase ends
+    const pad = (from, to, rg, mul, capFn, hold) => {
+      const bl = blocksIn(from, to); let prev = null; const cur = rg.map(() => null);
+      const flush = (k) => { const c = cur[k]; if (c) add(c.t, c.e - c.t, c.p, c.v, rg[k][0]); cur[k] = null; };
+      for (const b of bl) {
+        const cap = capFn ? capFn(b) : null, r2 = rg.map(([nm, lo, hi], k) => [nm, lo, k === 0 && cap != null ? Math.max(lo, Math.min(hi, cap)) : hi]);
+        const v = voice(b.ch, r2, prev); prev = v; const ph = phraseOf(b.t, from), endP = (from + (ph + 1) * 4) * barT, e = b.t + b.d, brk = hold ? false : e >= Math.min(endP, to * barT);
+        v.forEach((p, k) => { const c = cur[k]; const dy = (A.dyn[Math.floor(b.t / barT)] || 0.3) * mul;
+          if (c && c.p === p && c.e === b.t && c.ph === ph) { c.e = e; c.v = Math.max(c.v, dy); } else { flush(k); cur[k] = { t: b.t, e, p, v: dy, ph }; }
+          if (brk) { cur[k].e -= 110; flush(k); } });
       }
-      groups = Array.from({ length: A.bars }, () => ({ men, women }));
-    } else {
-      // answer: the choir sings where the orchestra breathes, echoing the tune it just heard
-      const quiet = A.melCover.map((c, k) => c < 0.3 || A.dens[k] < 0.3);
-      let slots = []; for (let k = 1; k < A.bars; k++) if (quiet[k] && A.segs[Math.floor(k * A.barT / A.segT)]) slots.push(k);
-      if (slots.length < Math.max(2, A.bars / 12)) { slots = []; for (let k = 3; k < A.bars; k += 4) slots.push(k); if (A.bars < 4) slots.push(A.bars - 1); }
-      groups = Array.from({ length: A.bars }, () => ({ men: false, women: false }));
-      let turn = R() < 0.5 ? 'women' : 'men';
-      for (const k of slots) {
-        const who = both ? turn : men ? 'men' : 'women'; turn = turn === 'men' ? 'women' : 'men';
-        const rg = who === 'men' ? rgMen : rgWom; groups[k][who] = true;
-        let src = k - 1; while (src > 0 && A.melCover[src] < 0.3) src--;
-        const echo = A.mel.filter((n) => n.t >= src * A.barT && n.t < (src + 1) * A.barT);
-        const off = (k - src) * A.barT, topR = rg[0]; let near = (topR[1] + topR[2]) >> 1, tops = [];
-        for (const n of echo) { const t = n.t + off; const ch = segAt(t); if (!ch) continue; const p = snapTo(intoRange(n.p, topR[1], topR[2], near), ch.pcs); const q = clamp(p, topR[1], topR[2]); near = q; tops.push(q);
-          add(t, Math.min(n.d, (k + 1) * A.barT - t - 40), q, (A.dyn[src] || 0.5) * 0.9, topR[0], true); }
-        const blk = blocks(k, k + 1); let prev = null; const low = tops.length ? Math.min(...tops) : null;
-        for (const b of blk) { const rr = [[rg[1][0], rg[1][1], low != null ? Math.max(rg[1][1], Math.min(rg[1][2], low - 3)) : rg[1][2]]]; const v = voice(b.ch, rr, prev); prev = v;
-          if (!tops.length) { const vt = voice(b.ch, rg, null); vt.forEach((p, j) => add(b.t, b.d - 40, p, (A.dyn[src] || 0.5) * 0.8, rg[j][0])); } else add(b.t, b.d - 40, v[0], (A.dyn[src] || 0.5) * 0.75, rr[0][0]); }
-      }
+      rg.forEach((_, k) => flush(k));
+    };
+    // the tune of the orchestra, simplified to what a choir can sing
+    const unit = 60000000 / M.tempos[0].us < 72 ? PPQ / 2 : PPQ;
+    const tuneIn = (from, to) => { const r = []; for (let t = from * barT; t < to * barT; t += unit) { const m = A.mel.find((x) => x.t <= t && x.t + x.d > t); if (!m) continue; const l = r[r.length - 1];
+      if (l && l.p === m.p && l.t + l.d === t && m.t < t) l.d += unit; else r.push({ t, d: unit, p: m.p }); } return r; };
+    const place = (tn, lo, hi, from) => { let near = null; return tn.map((x) => { const p = intoRange(x.p, lo, hi, near); near = p; const ph = phraseOf(x.t, from), endP = (from + (ph + 1) * 4) * barT; return { t: x.t, d: x.t + x.d >= endP - 10 ? Math.max(60, endP - x.t - 110) : x.d - 15, p }; }); };
+    const sing = (tn, vc, v, lead) => { for (const x of tn) add(x.t, x.d, x.p, (A.dyn[Math.floor(x.t / barT)] || 0.4) * v, vc, lead); };
+    const stabsOn = (from, to, rg, mul) => { let prev = null; for (const b of blocksIn(from, to)) { const D = b.d / PPQ; let rh = D >= 3.5 ? pick([[1.5, 1.5, 1], [0.5, 1, 0.5, 2], [1, 1, 2], [1.5, 0.5, 2]]) : D >= 1.5 ? pick([[0.75, 0.75, 0.5], [1.5, 0.5], [1, 1], [0.5, 1, 0.5]]) : [D];
+      const tot = rh.reduce((a, x) => a + x, 0); rh = rh.map((x) => x * b.d / tot); const v = voice(b.ch, rg, prev); prev = v; let t = b.t;
+      rh.forEach((du, k) => { v.forEach((p, j) => add(t, du * 0.8, p, (A.dyn[Math.floor(t / barT)] || 0.5) * mul + (k === 0 ? 0.08 : 0), rg[j][0], j === 0)); t += du; }); } };
+
+    for (let k = 0; k < n; k++) {
+      const s = secs[k], from = s.start, to = s.to, role = s.role;
+      const topLow = (tn) => (b) => { const inB = tn.filter((x) => x.t < b.t + b.d && x.t + x.d > b.t); return inB.length ? Math.min(...inB.map((x) => x.p)) - 3 : null; };
+      if (role === 'rest') continue;
+      if (role === 'pad') pad(from, to, rgFull, 0.72);
+      else if (role === 'padHigh') pad(from, to, rgWom, 0.6);
+      else if (role === 'padLow') pad(from, to, rgMen, 0.68);
+      else if (role === 'tune' || role === 'tutti') { const top = rgFull[0], tn = place(tuneIn(from, to), top[1], top[2], from); sing(tn, top[0], role === 'tutti' ? 1 : 0.85, true); if (rgFull.length > 1) pad(from, to, rgFull.slice(1), role === 'tutti' ? 0.9 : 0.72, topLow(tn)); }
+      else if (role === 'unison') { const raw = tuneIn(from, to); if (women) sing(place(raw, men ? Z.womenLo - 3 : rgWom[0][1], men ? Z.womenHi - 2 : rgWom[0][2], from), 'S', 0.8, true); if (men) sing(place(raw, Z.menLo + 5, Z.menHi + (women ? 4 : 0), from), 'T', 0.8, !women); }
+      else if (role === 'drone') { const tn = place(tuneIn(from, to), men ? Z.womenLo - 3 : rgWom[0][1], men ? Z.womenHi - 2 : rgWom[0][2], from); if (women) sing(tn, 'S', 0.75, true); const dp = Z.menLo + ((A.tonic - Z.menLo) % 12 + 12) % 12;
+        for (let b = from; b < to; b += 4) { const e = Math.min(to, b + 4); add(b * barT, (e - b) * barT - 110, dp, (A.dyn[b] || 0.4) * 0.6, 'B'); if (dp + 7 <= Z.menHi) add(b * barT, (e - b) * barT - 110, dp + 7, (A.dyn[b] || 0.4) * 0.5, 'T'); } }
+      else if (role === 'canon') { const top = rgWom[0], tn = place(tuneIn(from, to), top[1], top[2], from); sing(tn, 'S', 0.8, true); const T = rgMen[0]; let prevF = null;
+        for (const x of tn) { const t = x.t + barT; if (t + 60 >= to * barT) continue; const ch = chAt(t); let p = intoRange(x.p - 24, T[1], T[2], prevF); if (ch && (t % PPQ) === 0) p = clamp(snapTo(p, ch.pcs), T[1], T[2]); prevF = p; add(t, Math.min(x.d, to * barT - t - 110), p, (A.dyn[Math.floor(t / barT)] || 0.4) * 0.72, 'T', true); }
+        pad(from, to, [rgMen[1]], 0.55); }
+      else if (role === 'answer') {
+        const gaps = []; for (let b = from + 1; b < to; b++) if ((A.melCover[b] < 0.3 || A.dens[b] < 0.3) && A.segs[Math.floor(b * barT / A.segT)]) gaps.push(b);
+        const at = gaps.length >= Math.max(1, (to - from) / 8) ? gaps : []; if (!at.length) for (let b = from + 3; b < to; b += 4) at.push(b);
+        let turn = chance(0.5) ? 'women' : 'men';
+        for (const b of at) { const g = both ? turn : men ? 'men' : 'women'; turn = turn === 'men' ? 'women' : 'men'; const rg = g === 'men' ? rgMen : rgWom;
+          let src = b - 1; while (src > from && A.melCover[src] < 0.3) src--; const off = (b - src) * barT; let near = null; const tops = [];
+          for (const x of tuneIn(src, src + 1)) { const t = x.t + off; const ch = chAt(t); if (!ch) continue; const p = clamp(snapTo(intoRange(x.p, rg[0][1], rg[0][2], near), ch.pcs), rg[0][1], rg[0][2]); near = p; tops.push(p); add(t, Math.min(x.d - 15, (b + 1) * barT - t - 110), p, (A.dyn[src] || 0.5) * 0.85, rg[0][0], true); }
+          pad(b, b + 1, [rg[1]], 0.6, tops.length ? () => Math.min(...tops) - 3 : null); } }
+      else if (role === 'call') {
+        for (let b = from; b < to; b += 4) { const e = Math.min(to, b + 4), mid = Math.min(e, b + 2), g = both ? (((b - from) / 4) % 2 ? 'men' : 'women') : men ? 'men' : 'women', L = g === 'men' ? rgMen[0] : rgWom[0];
+          sing(place(tuneIn(b, mid), L[1], L[2], b), L[0], 0.9, true); if (e > mid) stabsOn(mid, e, rgFull, 0.85); } }
+      else if (role === 'stabs') stabsOn(from, to, rgFull, 0.85);
+      else if (role === 'finale') { const hold = Math.max(from, to - 2); if (hold > from) { const top = rgFull[0], tn = place(tuneIn(from, hold), top[1], top[2], from); sing(tn, top[0], 1, true); if (rgFull.length > 1) pad(from, hold, rgFull.slice(1), 0.9, topLow(tn)); }
+        let last = null; for (let sgi = Math.ceil(to * barT / A.segT) - 1; sgi >= 0 && !last; sgi--) last = A.segs[sgi];
+        if (last) { const v = voice(color(last), rgFull, null); const t0 = hold * barT, d0 = Math.max(barT, A.endT - t0 + barT / 2); v.forEach((p, j) => add(t0, d0, p, Math.max(0.75, A.dyn[hold] || 0.7), rgFull[j][0], j === 0)); } }
     }
-    return finish(out, M, A, mode, groups, Z, men, women, o);
+    return finish(out, M, A, secs, Z, men, women, style, o);
   }
 
-  function finish(notes, M, A, mode, groups, Z, men, women, o) {
+  function finish(notes, M, A, secs, Z, men, women, style, o) {
     for (const n of notes) n.vel = clamp(Math.round(22 + 100 * n.v + (n.lead ? 6 : 0)), 14, 124);
     notes.sort((a, b) => a.p - b.p || a.t - b.t);
     const merged = []; for (const n of notes) { const m = merged.length && merged[merged.length - 1]; if (m && m.p === n.p && n.t < m.t + m.d) { m.d = Math.max(m.d, n.t + n.d - m.t); m.vel = Math.max(m.vel, n.vel); continue; } merged.push(Object.assign({}, n)); }
@@ -178,24 +234,22 @@
     merged.sort((a, b) => a.t - b.t || a.p - b.p);
     const byP = {}; for (const n of merged) { const q = byP[n.p]; if (q && q.t + q.d > n.t - 20) q.d = Math.max(30, n.t - 20 - q.t); byP[n.p] = n; }
     let poly = 0, cur = 0; const ev = []; for (const n of merged) ev.push([n.t, 1], [n.t + n.d, -1]); ev.sort((a, b) => a[0] - b[0] || a[1] - b[1]); for (const [, d] of ev) { cur += d; poly = Math.max(poly, cur); }
-    // sections of four bars: who sings and on which vowel
-    const secBars = A.bars > 48 ? 8 : 4, strip = [], markers = [];
-    for (let s = 0; s < A.bars; s += secBars) {
-      const e = Math.min(A.bars, s + secBars), inS = merged.filter((n) => n.t >= s * A.barT && n.t < e * A.barT);
-      const dy = Math.max(0, ...A.dyn.slice(s, e)), short = inS.filter((n) => n.lead).some((n) => n.d < PPQ / 2);
-      const mIn = inS.some((n) => n.p <= Z.menHi || (n.voice === 'T' || n.voice === 'B')), wIn = inS.some((n) => n.p >= Z.womenLo || n.voice === 'S' || n.voice === 'A');
-      const pickV = (high) => (o.vowel === 'oo' ? 'OO' : o.vowel === 'ah' ? 'AH' : (dy >= 0.68 || high) && !short ? 'AH' : 'OO');
-      const wHigh = inS.filter((n) => n.p >= Z.womenLo).some((n) => n.p >= Z.womenLo + 9);
-      const sec = { label: 'Bar ' + (s + 1), start: s * A.barT / PPQ, beats: (e - s) * A.barT / PPQ, men: men && mIn ? pickV(false) : '', women: women && wIn ? pickV(wHigh) : '' };
-      strip.push(sec); const parts = [sec.men && 'Men ' + sec.men, sec.women && 'Women ' + sec.women].filter(Boolean);
-      markers.push({ t: s * A.barT, text: sec.label + (parts.length ? ' · ' + parts.join(' · ') : ' · rest') });
+    const barT = A.barT, strip = [], markers = [], cc = [];
+    for (const s of secs) {
+      const inS = merged.filter((x) => x.t >= s.from * barT - 30 && x.t < s.to * barT);
+      const mIn = men && inS.some((x) => x.voice === 'T' || x.voice === 'B'), wIn = women && inS.some((x) => x.voice === 'S' || x.voice === 'A');
+      strip.push({ label: s.label, start: s.from * barT / PPQ, beats: (s.to - s.from) * barT / PPQ, men: mIn, women: wIn, role: ROLE_TEXT[s.role] });
+      markers.push({ t: s.from * barT, text: s.label + ' · ' + ROLE_TEXT[s.role] + (s.start > s.from ? ', from bar ' + (s.start + 1) : '') });
+      // the swell: one arch per four bars, never pumping bar by bar
+      const mul = s.role === 'rest' ? 0 : s.role === 'tutti' || s.role === 'finale' ? 1 : s.role === 'padHigh' ? 0.6 : 0.8;
+      for (let t = s.from * barT; t < s.to * barT; t += PPQ / 2) { const ph = 4 * barT, x = ((t - s.start * barT) % ph + ph) % ph / ph, arch = Math.sin(Math.PI * Math.min(1, x * 0.8 + 0.1));
+        const fin = s.role === 'finale' ? (t - s.from * barT) / ((s.to - s.from) * barT) * 0.25 : 0;
+        cc.push({ t, v: clamp(Math.round(mul ? 28 + 90 * (s.dyn * mul) * (0.6 + 0.4 * arch) + 40 * fin : 20), 10, 124) }); }
     }
-    const cc = []; for (let t = 0; t < A.bars * A.barT; t += PPQ / 2) { const k = Math.floor(t / A.barT), a = A.dyn[k] || 0, b = A.dyn[k + 1] == null ? a : A.dyn[k + 1], f = (t % A.barT) / A.barT; cc.push({ t, v: clamp(Math.round(30 + 90 * (a + (b - a) * f)), 20, 124) }); }
-    let secs = 0, lt = 0, us = M.tempos[0].us; for (const tp of M.tempos) { if (tp.t > A.endT) break; secs += (tp.t - lt) / PPQ * us / 1e6; lt = tp.t; us = tp.us; } secs += (A.endT - lt) / PPQ * us / 1e6;
-    const bpm = 60000000 / M.tempos[0].us, key = NOTE[A.tonic] + ' ' + (A.minor ? 'minor' : 'major');
-    return { notes: merged.map((n) => ({ t: n.t, d: n.d, p: n.p, v: n.vel, voice: n.voice })), cc, markers, beats: A.bars * A.barT / PPQ, meter: M.sig.num, meterDen: M.sig.den, tempos: M.tempos, key, bpm, seconds: Math.round(secs), strip,
-      playMode: poly <= 1 ? 'legato' : 'keys', maxPoly: poly, zones: Z, desc: MODES[mode] + ' with your orchestra · ' + key + ' · ' + A.bars + ' bars', fileTag: MODES[mode].replace(/\s+/g, ''), mode, bars: A.bars, chords: A.segs };
+    let secsT = 0, lt = 0, us = M.tempos[0].us; for (const tp of M.tempos) { if (tp.t > A.endT) break; secsT += (tp.t - lt) / PPQ * us / 1e6; lt = tp.t; us = tp.us; } secsT += (A.endT - lt) / PPQ * us / 1e6;
+    const bpm = 60000000 / M.tempos[0].us, key = NOTE[A.tonic] + ' ' + (A.minor ? 'minor' : 'major'), sty = (C.STYLES[style] || { name: 'Film' }).name;
+    return { notes: merged.map((n) => ({ t: n.t, d: n.d, p: n.p, v: n.vel, voice: n.voice })), cc, markers, beats: A.bars * barT / PPQ, meter: M.sig.num, meterDen: M.sig.den, tempos: M.tempos, key, bpm, seconds: Math.round(secsT), strip,
+      playMode: poly <= 1 ? 'legato' : 'keys', maxPoly: poly, zones: Z, desc: sty + ' choir with your orchestra · ' + key + ' · ' + A.bars + ' bars', fileTag: sty + 'WithOrchestra', mode: 'story', bars: A.bars, roles: secs.map((s) => s.role) };
   }
-
   C.follow = follow; C.FOLLOW_MODES = MODES; C.parseMidi = parse;
 })(typeof window !== 'undefined' ? window : globalThis);

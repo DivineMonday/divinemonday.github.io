@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Divine Choir Machine</title>
-<meta name="description" content="Compose for a choir in your browser: pick a style, who sings and what the choir is for. One MIDI file for a men and women sample choir, with the vowels and the swell written in. Free, no account.">
+<meta name="description" content="A choir that composes itself: pick who sings and a style, from Gregorian chant to gospel. Or give it your orchestra MIDI and the choir joins in with its own story. One MIDI file for your choir plugin. Free, no account.">
 <meta property="og:title" content="Divine Choir Machine">
-<meta property="og:description" content="Men below, women above, one choir. Gregorian, Palestrina, Bach, Pärt and more, as one MIDI file.">
+<meta property="og:description" content="Pick who sings and a style; the choir does the rest. Or let it join your orchestra.">
 <meta property="og:image" content="https://divinemonday.github.io/og/og-choir.png">
 <meta property="og:url" content="https://divinemonday.github.io/choir/">
 <meta property="og:type" content="website">
@@ -27,6 +27,7 @@ h1 i{color:var(--gold)}
 .lead{color:var(--mu);margin:4px 0 18px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px;margin-bottom:14px}
 .card h2{font-size:13px;letter-spacing:1.6px;text-transform:uppercase;color:var(--gold);margin:0 0 12px}
+.styles{display:flex;flex-wrap:wrap;gap:8px}.styles label{flex:1;min-width:120px}.styles input{position:absolute;opacity:0}.styles span{display:block;text-align:center;background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:12px 10px;font-weight:700;cursor:pointer}.styles input:checked+span{border-color:var(--gold);color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}.styles input:focus-visible+span{outline:2px solid var(--gold)}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
 label.f{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--mu)}
 select,input[type=text],input[type=number]{background:var(--card2);color:var(--tx);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font:inherit;min-height:44px;width:100%}
@@ -62,38 +63,33 @@ footer a{color:var(--mu)}
 <body>
 <div class="wrap">
 <header><h1>Divine <i>Choir</i> Machine</h1><a class="home" href="../" title="All Divine Monday tools">← All tools</a></header>
-<p class="lead">Men below, women above, one choir. Pick a style, who sings and what the choir is for; the machine writes it as one MIDI file for your choir plugin.</p>
+<p class="lead">Pick who sings and a style. The choir decides the rest: the form, the mood, the spirit of a composer, who leads and when to be silent. Or give it your orchestra and it joins in with its own story.</p>
 
 <div class="card"><div class="row">
   <div class="name"><input type="text" id="nm" aria-label="Name of the piece" maxlength="40"><button class="btn dice" id="nmDice" type="button" title="A new name" aria-label="A new name">⚄</button></div>
   <button class="btn acc" id="all" type="button">All at once</button>
 </div></div>
 
-<div class="card"><h2>1. Style</h2><div class="grid">
-  <label class="f">Style<select id="style"></select></label>
-  <label class="f">Nuance<select id="nuance"></select></label>
-  <label class="f">In the spirit of<select id="spirit"></select></label>
-  <label class="f">Form<select id="form"></select></label>
-</div></div>
-
-<div class="card"><h2>2. Who sings</h2>
+<div class="card"><h2>Who sings</h2>
   <div class="row"><label class="chk"><input type="checkbox" id="men" checked> Men</label><label class="chk"><input type="checkbox" id="women" checked> Women</label></div>
-  <div class="grid" style="margin-top:12px">
-    <label class="f">Together how<select id="texture"></select></label>
-    <label class="f">Solo<select id="solo"></select></label>
-  </div>
 </div>
 
-<div class="card"><h2>3. What the choir is for</h2><div class="grid">
-  <label class="f">Role<select id="role"></select></label>
-  <label class="f">Vowel<select id="vowel"><option value="auto">Auto: OO when soft, AH when big</option><option value="oo">Always OO</option><option value="ah">Always AH</option></select></label>
-</div></div>
-
-<div class="card"><h2>4. Length</h2><div class="row">
-  <select id="lenMode" style="max-width:220px"><option value="free">Free</option><option value="exact">Exactly</option></select>
-  <span id="lenBox" class="row" hidden><input type="number" id="lenMin" min="0" max="15" value="2" style="width:80px" aria-label="Minutes"> min <input type="number" id="lenSec" min="0" max="59" value="30" style="width:80px" aria-label="Seconds"> sec</span>
+<div class="card"><h2>Style</h2>
+  <div class="styles" id="styles" role="radiogroup" aria-label="Style"></div>
+  <div class="hint" id="styleHint"></div>
 </div>
-<details style="margin-top:14px"><summary>Your plugin's keyboard</summary>
+
+<div class="row" style="justify-content:center;margin:20px 0"><button class="btn big" id="go" type="button">Let the choir sing</button></div>
+
+<div class="card"><h2>Or: the choir joins your orchestra</h2>
+  <p class="hint" style="margin:0 0 12px">Give it an orchestra MIDI, from the Symphony Machine or your own. The choir listens to the key, the chords, the tune and the chapters of the piece, then decides where to be silent, where to answer and where to sing out.</p>
+  <div class="row"><button class="btn" id="fPick" type="button" style="flex:1">Choose or drop an orchestra MIDI</button></div>
+  <input type="file" id="fFile" accept=".mid,.midi,audio/midi" hidden>
+  <div class="hint" id="fInfo"></div>
+  <div class="row" style="justify-content:center;margin-top:14px"><button class="btn big" id="fGo" type="button" disabled>Let the choir join</button></div>
+</div>
+
+<div class="card"><details><summary>Your plugin's keyboard</summary>
   <div class="kb"><span style="background:var(--men)">Men</span> below, <span style="background:var(--mid)">Middle</span> both groups, <span style="background:var(--wom)">Women</span> above. Set as Soundiron Olympus Micro; change it for another choir.</div>
   <div class="zones">
     <label class="f">Lowest men key<select id="zMenLo"></select></label>
@@ -103,22 +99,9 @@ footer a{color:var(--mu)}
   </div>
 </details></div>
 
-<div class="row" style="justify-content:center;margin:20px 0"><button class="btn big" id="go" type="button">Let the choir sing</button></div>
-
-<div class="card"><h2>Or: the choir joins your orchestra</h2>
-  <p class="hint" style="margin:0 0 12px">Give it an orchestra MIDI, from the Symphony Machine or your own. The choir hears the key, the chords and the tune, and writes its part to fit. Who sings, the vowel and the keyboard come from the choices above.</p>
-  <div class="grid">
-    <label class="f">What the choir does<select id="fMode"><option value="sing">Sing along: the choir sings the tune with chords below</option><option value="answer">Answer: the choir sings where the orchestra breathes</option><option value="carry">Carry: long held chords under the orchestra</option></select></label>
-    <label class="f">Your orchestra<button class="btn" id="fPick" type="button">Choose or drop an orchestra MIDI</button></label>
-  </div>
-  <input type="file" id="fFile" accept=".mid,.midi,audio/midi" hidden>
-  <div class="hint" id="fInfo"></div>
-  <div class="row" style="justify-content:center;margin-top:14px"><button class="btn big" id="fGo" type="button" disabled>Let the choir join</button></div>
-</div>
-
 <div class="card res" id="out" hidden>
   <h3 id="oName"></h3><div class="meta" id="oMeta"></div>
-  <canvas class="strip" id="strip" width="1800" height="300"></canvas>
+  <canvas class="strip" id="strip" width="1800" height="330"></canvas>
   <div class="row" style="margin:14px 0"><button class="btn big" id="dl" type="button">↓ MIDI</button><span class="hint" id="oMode"></span></div>
   <h2 style="margin-top:8px">In Studio One</h2>
   <ol class="steps" id="howto"></ol>
@@ -133,30 +116,29 @@ footer a{color:var(--mu)}
 (() => {
   const C = window.Choir, $ = (q) => document.querySelector(q);
   const store = { get(k, d) { try { const v = localStorage.getItem('dcm-' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem('dcm-' + k, JSON.stringify(v)); } catch (e) {} } };
-  const fill = (sel, obj, label) => { sel.innerHTML = ''; for (const k of Object.keys(obj)) sel.add(new Option(label ? label(obj[k], k) : obj[k], k)); };
-  fill($('#style'), C.STYLES, (s) => s.name); fill($('#form'), C.FORMS, (f) => f.name); fill($('#role'), C.ROLES, (r) => r.name); fill($('#texture'), C.TEXTURES); fill($('#solo'), C.SOLOS);
+  const HINT = { gregorian: 'Monks and nuns: one line, free and floating, with a drone or two groups taking turns.', polyphony: 'Palestrina and Monteverdi: woven voices that enter one by one.', baroque: 'Bach, Handel and Mozart: chorales, festive choruses and fugues.', film: 'Fauré, Pärt, Whitacre and Orff: haunting, epic or still, like a film score.', gospel: 'A leader calls, the choir answers: rich chords, rhythm and a shout at the end.' };
+  const order = ['gregorian', 'polyphony', 'baroque', 'film', 'gospel'];
+  $('#styles').innerHTML = order.map((k) => '<label><input type="radio" name="st" value="' + k + '"><span>' + C.STYLES[k].name + '</span></label>').join('');
+  const styleNow = () => (document.querySelector('input[name=st]:checked') || {}).value || 'film';
+  const setStyle = (k) => { const i = document.querySelector('input[name=st][value=' + k + ']'); if (i) i.checked = true; $('#styleHint').textContent = HINT[k] || ''; };
   const keyOpts = (sel, lo, hi) => { for (let p = lo; p <= hi; p++) sel.add(new Option(C.noteName(p) + '  (' + p + ')', p)); };
   keyOpts($('#zMenLo'), 24, 60); keyOpts($('#zMenHi'), 36, 72); keyOpts($('#zWomLo'), 48, 84); keyOpts($('#zWomHi'), 60, 100);
-  const subs = () => { const st = C.STYLES[$('#style').value]; const nv = $('#nuance').value, sv = $('#spirit').value; fill($('#nuance'), st.nuances); fill($('#spirit'), Object.fromEntries(st.spirits.map((k) => [k, C.SPIRITS[k].name]))); if (st.nuances[nv]) $('#nuance').value = nv; if (st.spirits.includes(sv)) $('#spirit').value = sv; };
   let seed = Math.floor(Math.random() * 1e9) + 1;
-  const IDS = ['style', 'nuance', 'spirit', 'form', 'role', 'texture', 'solo', 'vowel', 'lenMode', 'lenMin', 'lenSec', 'zMenLo', 'zMenHi', 'zWomLo', 'zWomHi'];
-  const read = () => ({ style: $('#style').value, nuance: $('#nuance').value, spirit: $('#spirit').value, form: $('#form').value, role: $('#role').value, men: $('#men').checked, women: $('#women').checked, texture: $('#texture').value, solo: $('#solo').value, vowel: $('#vowel').value,
-    seconds: $('#lenMode').value === 'exact' ? Math.max(20, (+$('#lenMin').value || 0) * 60 + (+$('#lenSec').value || 0)) : 0, seed,
-    zones: { menLo: +$('#zMenLo').value, menHi: +$('#zMenHi').value, womenLo: +$('#zWomLo').value, womenHi: +$('#zWomHi').value } });
-  const save = () => { const o = {}; IDS.forEach((k) => { o[k] = $('#' + k).value; }); o.men = $('#men').checked; o.women = $('#women').checked; o.name = $('#nm').value; store.set('ui', o); };
-  const load = () => { const o = store.get('ui', null); const z = C.ZONES; $('#zMenLo').value = z.menLo; $('#zMenHi').value = z.menHi; $('#zWomLo').value = z.womenLo; $('#zWomHi').value = z.womenHi; $('#style').value = 'baroque'; subs(); if (!o) { $('#nm').value = C.makeName(seed); return; }
-    $('#style').value = o.style || 'baroque'; subs(); IDS.forEach((k) => { if (o[k] != null && k !== 'style') $('#' + k).value = o[k]; }); $('#men').checked = o.men !== false; $('#women').checked = o.women !== false; $('#nm').value = o.name || C.makeName(seed); };
-  load(); $('#lenBox').hidden = $('#lenMode').value !== 'exact';
-  $('#style').onchange = () => { subs(); save(); }; IDS.slice(1).forEach((k) => { $('#' + k).addEventListener('change', save); });
+  const Zk = ['zMenLo', 'zMenHi', 'zWomLo', 'zWomHi'];
+  const zones = () => ({ menLo: +$('#zMenLo').value, menHi: +$('#zMenHi').value, womenLo: +$('#zWomLo').value, womenHi: +$('#zWomHi').value });
+  const save = () => { const o = { style: styleNow(), men: $('#men').checked, women: $('#women').checked, name: $('#nm').value }; Zk.forEach((k) => { o[k] = $('#' + k).value; }); store.set('ui2', o); };
+  (() => { const o = store.get('ui2', {}), z = C.ZONES; $('#zMenLo').value = o.zMenLo || z.menLo; $('#zMenHi').value = o.zMenHi || z.menHi; $('#zWomLo').value = o.zWomLo || z.womenLo; $('#zWomHi').value = o.zWomHi || z.womenHi;
+    setStyle(order.includes(o.style) ? o.style : 'film'); $('#men').checked = o.men !== false; $('#women').checked = o.women !== false; $('#nm').value = o.name || C.makeName(seed); })();
+  $('#styles').addEventListener('change', () => { setStyle(styleNow()); save(); });
+  Zk.forEach((k) => $('#' + k).addEventListener('change', save));
   ['men', 'women'].forEach((k) => $('#' + k).addEventListener('change', () => { if (!$('#men').checked && !$('#women').checked) $('#' + (k === 'men' ? 'women' : 'men')).checked = true; save(); }));
-  $('#lenMode').addEventListener('change', () => { $('#lenBox').hidden = $('#lenMode').value !== 'exact'; });
   $('#nm').addEventListener('input', save);
   $('#nmDice').onclick = () => { $('#nm').value = C.makeName(Math.floor(Math.random() * 1e9)); save(); };
 
   let last = null;
-  const sing = () => {
-    seed = Math.floor(Math.random() * 1e9) + 1; const o = read(); show(C.compose(o)); };
-  const show = (r) => { last = { r, name: $('#nm').value.trim() || C.makeName(seed) };
+  const sing = () => { seed = Math.floor(Math.random() * 1e9) + 1; const o = C.auto(styleNow(), $('#men').checked, $('#women').checked, seed); o.zones = zones(); show(C.compose(o)); };
+  const show = (r) => {
+    last = { r, name: $('#nm').value.trim() || C.makeName(seed) };
     $('#out').hidden = false; $('#oName').textContent = last.name;
     const mm = Math.floor(r.seconds / 60), ss = String(r.seconds % 60).padStart(2, '0');
     $('#oMeta').textContent = r.desc + ' · ' + Math.round(r.bpm) + ' bpm · ' + mm + ':' + ss;
@@ -164,26 +146,25 @@ footer a{color:var(--mu)}
     draw(r); howto(r); save();
     setTimeout(() => $('#out').scrollIntoView({ behavior: 'smooth', block: 'start' }), 30);
   };
-  const draw = (r) => { // where each group sings, section by section, with the vowel
-    const cv = $('#strip'), g = cv.getContext('2d'), W = cv.width, H = cv.height, Z = r.zones, total = r.beats * C.PPQ;
-    g.clearRect(0, 0, W, H); const top = 46, rowH = (H - top - 20) / 3;
-    const rows = [['Women', (p) => p >= Z.womenLo, getComputedStyle(document.body).getPropertyValue('--wom')], ['Middle', (p) => p > Z.menHi && p < Z.womenLo, getComputedStyle(document.body).getPropertyValue('--mid')], ['Men', (p) => p <= Z.menHi, getComputedStyle(document.body).getPropertyValue('--men')]];
-    g.font = '600 26px Inter,system-ui,sans-serif'; g.textBaseline = 'middle';
-    const x0 = 150, w = W - x0 - 10;
-    r.strip.forEach((s, i) => { const x = x0 + s.start * C.PPQ / total * w; g.fillStyle = i % 2 ? 'rgba(255,255,255,.03)' : 'rgba(255,255,255,.06)'; g.fillRect(x, 0, s.beats * C.PPQ / total * w, H); g.fillStyle = '#AE9E90'; g.font = '600 22px Inter,system-ui,sans-serif'; g.fillText(s.label.slice(0, 18), x + 8, 22); });
+  const draw = (r) => { // where each group sings, chapter by chapter
+    const cv = $('#strip'), g = cv.getContext('2d'), W = cv.width, H = cv.height, Z = r.zones, total = r.beats * C.PPQ, css = getComputedStyle(document.body);
+    g.clearRect(0, 0, W, H); const top = 70, rowH = (H - top - 14) / 3, x0 = 150, w = W - x0 - 10;
+    const rows = [['Women', (p) => p >= Z.womenLo, css.getPropertyValue('--wom')], ['Middle', (p) => p > Z.menHi && p < Z.womenLo, css.getPropertyValue('--mid')], ['Men', (p) => p <= Z.menHi, css.getPropertyValue('--men')]];
+    g.textBaseline = 'middle';
+    r.strip.forEach((s, i) => { const x = x0 + s.start * C.PPQ / total * w, sw = s.beats * C.PPQ / total * w; g.fillStyle = i % 2 ? 'rgba(255,255,255,.03)' : 'rgba(255,255,255,.07)'; g.fillRect(x, 0, sw, H);
+      g.save(); g.beginPath(); g.rect(x, 0, sw - 4, top); g.clip(); g.fillStyle = '#F2EADD'; g.font = '700 22px Inter,system-ui,sans-serif'; g.fillText(s.label, x + 8, 20);
+      if (s.role) { g.fillStyle = '#AE9E90'; g.font = '500 19px Inter,system-ui,sans-serif'; g.fillText(s.role, x + 8, 48); } g.restore(); });
     rows.forEach(([label, sel, col], k) => { const y = top + k * rowH; g.fillStyle = '#F2EADD'; g.font = '700 26px Inter,system-ui,sans-serif'; g.fillText(label, 12, y + rowH / 2); g.fillStyle = col.trim();
       for (const n of r.notes) if (sel(n.p)) { g.globalAlpha = 0.35 + 0.65 * n.v / 127; g.fillRect(x0 + n.t / total * w, y + 8, Math.max(2, n.d / total * w - 1), rowH - 16); } g.globalAlpha = 1; });
-    r.strip.forEach((s) => { const x = x0 + s.start * C.PPQ / total * w + 8; g.font = '700 22px Inter,system-ui,sans-serif';
-      if (s.women) { g.fillStyle = '#130E11'; g.fillRect(x - 4, top + rowH - 30, 52, 26); g.fillStyle = '#E8D36A'; g.fillText(s.women, x, top + rowH - 17); }
-      if (s.men) { g.fillStyle = '#130E11'; g.fillRect(x - 4, top + 3 * rowH - 30, 52, 26); g.fillStyle = '#E5825C'; g.fillText(s.men, x, top + 3 * rowH - 17); } });
   };
   const howto = (r) => {
-    const changes = r.strip.filter((s, i) => i === 0 || s.men !== r.strip[i - 1].men || s.women !== r.strip[i - 1].women).map((s) => s.label + ': ' + [s.men && 'Men ' + s.men, s.women && 'Women ' + s.women].filter(Boolean).join(', ')).filter((x) => x.includes(' '));
-    const li = [r.mode ? 'Drag the MIDI onto an instrument track with your choir plugin, at bar 1 of the song with your orchestra.' : 'Drag the MIDI onto an instrument track with your choir plugin.', 'Press ' + (r.playMode === 'legato' ? 'LEGATO' : 'KEYS') + ' in the plugin.',
-      'Set the vowels; the markers in the file show them too:<br>' + changes.slice(0, 8).map((x) => '<span class="tag">' + x + '</span>').join(' '), 'The swell is written as the mod wheel (CC1). Let it move the SWELL knob, or draw your own.', 'Press play.'];
+    const li = [r.mode ? 'Drag the MIDI onto an instrument track with your choir plugin, at bar 1 of the song with your orchestra.' : 'Drag the MIDI onto an instrument track with your choir plugin.',
+      'Press ' + (r.playMode === 'legato' ? 'LEGATO' : 'KEYS') + ' in the plugin.', 'Pick the vowels in the plugin yourself, for example men OO and women AH.',
+      'The chapters are markers in the file, so you see where the choir rests, answers or sings out.', 'The swell is written as the mod wheel (CC1). Let it move the SWELL knob, or draw your own.', 'Press play.'];
     $('#howto').innerHTML = li.map((x) => '<li>' + x + '</li>').join('');
   };
   $('#go').onclick = sing;
+  $('#all').onclick = () => { const R = Math.random(); setStyle(order[Math.floor(Math.random() * order.length)]); const both = R < 0.7; $('#men').checked = both || R < 0.85; $('#women').checked = both || R >= 0.85; $('#nm').value = C.makeName(Math.floor(Math.random() * 1e9)); save(); sing(); };
   let orch = null;
   const takeFile = (f) => { if (!f) return; if (!/\.midi?$/i.test(f.name)) { $('#fInfo').textContent = 'That is not a MIDI file. Choose a .mid file.'; return; }
     f.arrayBuffer().then((buf) => { try { const M = C.parseMidi(buf); if (!M.notes.some((n) => n.ch !== 9)) throw new Error('Only drums in this file; the choir needs an orchestra.'); orch = { buf, name: f.name.replace(/\.midi?$/i, '') }; $('#fInfo').textContent = 'Loaded: ' + f.name; $('#fPick').textContent = f.name + ' (choose another)'; $('#fGo').disabled = false; }
@@ -192,10 +173,8 @@ footer a{color:var(--mu)}
   $('#fFile').onchange = (e) => takeFile(e.target.files[0]);
   document.addEventListener('dragover', (e) => { e.preventDefault(); });
   document.addEventListener('drop', (e) => { e.preventDefault(); takeFile(e.dataTransfer.files[0]); });
-  $('#fGo').onclick = () => { if (!orch) return; seed = Math.floor(Math.random() * 1e9) + 1; const o = read();
-    try { const r = C.follow(orch.buf, { mode: $('#fMode').value, men: o.men, women: o.women, vowel: o.vowel, zones: o.zones, seed }); if (!$('#nm').value.trim()) $('#nm').value = orch.name; show(r); } catch (e) { $('#fInfo').textContent = e.message; } };
-  $('#fMode').addEventListener('change', () => store.set('fmode', $('#fMode').value)); $('#fMode').value = store.get('fmode', 'sing');
-  $('#all').onclick = () => { const s = C.surprise(Math.floor(Math.random() * 1e9)); $('#style').value = s.style; subs(); ['nuance', 'spirit', 'form', 'role', 'texture', 'solo', 'vowel'].forEach((k) => { $('#' + k).value = s[k]; }); $('#men').checked = s.men; $('#women').checked = s.women; $('#nm').value = C.makeName(s.seed); save(); sing(); };
+  $('#fGo').onclick = () => { if (!orch) return; seed = Math.floor(Math.random() * 1e9) + 1;
+    try { show(C.follow(orch.buf, { style: styleNow(), men: $('#men').checked, women: $('#women').checked, zones: zones(), seed })); } catch (e) { $('#fInfo').textContent = e.message; } };
   $('#dl').onclick = () => { if (!last) return; const r = last.r, safe = last.name.replace(/[^\w ]+/g, '').trim().replace(/\s+/g, '_') || 'Choir';
     const blob = new Blob([C.toMidi(r, last.name)], { type: 'audio/midi' }), a = document.createElement('a'); a.href = URL.createObjectURL(blob);
     a.download = 'DM_Choir_' + safe + '_' + (r.fileTag || C.SPIRITS[r.spirit].name.replace(/[^\w]+/g, '')) + '_' + Math.round(r.bpm) + 'bpm_' + r.key.replace(/\s+/g, '') + '.mid'; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000); };
