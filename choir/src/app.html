@@ -34,6 +34,7 @@ select:focus,input:focus{outline:2px solid var(--gold);outline-offset:1px}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .btn{background:var(--card2);color:var(--tx);border:1px solid var(--line);border-radius:12px;padding:10px 16px;font:600 15px Inter,system-ui,sans-serif;min-height:44px;cursor:pointer}
 .btn:hover{border-color:var(--gold)}
+.btn:disabled{opacity:.45;cursor:default}
 .btn.big{font-size:18px;padding:14px 24px;background:var(--gold);color:#1a1310;border-color:var(--gold)}
 .btn.acc{background:var(--wine);border-color:var(--wine)}
 .chk{display:flex;align-items:center;gap:10px;background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:10px 14px;min-height:44px;cursor:pointer;font-weight:600}
@@ -104,6 +105,17 @@ footer a{color:var(--mu)}
 
 <div class="row" style="justify-content:center;margin:20px 0"><button class="btn big" id="go" type="button">Let the choir sing</button></div>
 
+<div class="card"><h2>Or: the choir joins your orchestra</h2>
+  <p class="hint" style="margin:0 0 12px">Give it an orchestra MIDI, from the Symphony Machine or your own. The choir hears the key, the chords and the tune, and writes its part to fit. Who sings, the vowel and the keyboard come from the choices above.</p>
+  <div class="grid">
+    <label class="f">What the choir does<select id="fMode"><option value="sing">Sing along: the choir sings the tune with chords below</option><option value="answer">Answer: the choir sings where the orchestra breathes</option><option value="carry">Carry: long held chords under the orchestra</option></select></label>
+    <label class="f">Your orchestra<button class="btn" id="fPick" type="button">Choose or drop an orchestra MIDI</button></label>
+  </div>
+  <input type="file" id="fFile" accept=".mid,.midi,audio/midi" hidden>
+  <div class="hint" id="fInfo"></div>
+  <div class="row" style="justify-content:center;margin-top:14px"><button class="btn big" id="fGo" type="button" disabled>Let the choir join</button></div>
+</div>
+
 <div class="card res" id="out" hidden>
   <h3 id="oName"></h3><div class="meta" id="oMeta"></div>
   <canvas class="strip" id="strip" width="1800" height="300"></canvas>
@@ -143,7 +155,8 @@ footer a{color:var(--mu)}
 
   let last = null;
   const sing = () => {
-    seed = Math.floor(Math.random() * 1e9) + 1; const o = read(); const r = C.compose(o); last = { r, name: $('#nm').value.trim() || C.makeName(seed) };
+    seed = Math.floor(Math.random() * 1e9) + 1; const o = read(); show(C.compose(o)); };
+  const show = (r) => { last = { r, name: $('#nm').value.trim() || C.makeName(seed) };
     $('#out').hidden = false; $('#oName').textContent = last.name;
     const mm = Math.floor(r.seconds / 60), ss = String(r.seconds % 60).padStart(2, '0');
     $('#oMeta').textContent = r.desc + ' · ' + Math.round(r.bpm) + ' bpm · ' + mm + ':' + ss;
@@ -166,15 +179,26 @@ footer a{color:var(--mu)}
   };
   const howto = (r) => {
     const changes = r.strip.filter((s, i) => i === 0 || s.men !== r.strip[i - 1].men || s.women !== r.strip[i - 1].women).map((s) => s.label + ': ' + [s.men && 'Men ' + s.men, s.women && 'Women ' + s.women].filter(Boolean).join(', ')).filter((x) => x.includes(' '));
-    const li = ['Drag the MIDI onto an instrument track with your choir plugin.', 'Press ' + (r.playMode === 'legato' ? 'LEGATO' : 'KEYS') + ' in the plugin.',
+    const li = [r.mode ? 'Drag the MIDI onto an instrument track with your choir plugin, at bar 1 of the song with your orchestra.' : 'Drag the MIDI onto an instrument track with your choir plugin.', 'Press ' + (r.playMode === 'legato' ? 'LEGATO' : 'KEYS') + ' in the plugin.',
       'Set the vowels; the markers in the file show them too:<br>' + changes.slice(0, 8).map((x) => '<span class="tag">' + x + '</span>').join(' '), 'The swell is written as the mod wheel (CC1). Let it move the SWELL knob, or draw your own.', 'Press play.'];
     $('#howto').innerHTML = li.map((x) => '<li>' + x + '</li>').join('');
   };
   $('#go').onclick = sing;
+  let orch = null;
+  const takeFile = (f) => { if (!f) return; if (!/\.midi?$/i.test(f.name)) { $('#fInfo').textContent = 'That is not a MIDI file. Choose a .mid file.'; return; }
+    f.arrayBuffer().then((buf) => { try { const M = C.parseMidi(buf); if (!M.notes.some((n) => n.ch !== 9)) throw new Error('Only drums in this file; the choir needs an orchestra.'); orch = { buf, name: f.name.replace(/\.midi?$/i, '') }; $('#fInfo').textContent = 'Loaded: ' + f.name; $('#fPick').textContent = f.name + ' (choose another)'; $('#fGo').disabled = false; }
+      catch (e) { orch = null; $('#fGo').disabled = true; $('#fInfo').textContent = e.message; } }); };
+  $('#fPick').onclick = () => $('#fFile').click();
+  $('#fFile').onchange = (e) => takeFile(e.target.files[0]);
+  document.addEventListener('dragover', (e) => { e.preventDefault(); });
+  document.addEventListener('drop', (e) => { e.preventDefault(); takeFile(e.dataTransfer.files[0]); });
+  $('#fGo').onclick = () => { if (!orch) return; seed = Math.floor(Math.random() * 1e9) + 1; const o = read();
+    try { const r = C.follow(orch.buf, { mode: $('#fMode').value, men: o.men, women: o.women, vowel: o.vowel, zones: o.zones, seed }); if (!$('#nm').value.trim()) $('#nm').value = orch.name; show(r); } catch (e) { $('#fInfo').textContent = e.message; } };
+  $('#fMode').addEventListener('change', () => store.set('fmode', $('#fMode').value)); $('#fMode').value = store.get('fmode', 'sing');
   $('#all').onclick = () => { const s = C.surprise(Math.floor(Math.random() * 1e9)); $('#style').value = s.style; subs(); ['nuance', 'spirit', 'form', 'role', 'texture', 'solo', 'vowel'].forEach((k) => { $('#' + k).value = s[k]; }); $('#men').checked = s.men; $('#women').checked = s.women; $('#nm').value = C.makeName(s.seed); save(); sing(); };
   $('#dl').onclick = () => { if (!last) return; const r = last.r, safe = last.name.replace(/[^\w ]+/g, '').trim().replace(/\s+/g, '_') || 'Choir';
     const blob = new Blob([C.toMidi(r, last.name)], { type: 'audio/midi' }), a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = 'DM_Choir_' + safe + '_' + C.SPIRITS[r.spirit].name.replace(/[^\w]+/g, '') + '_' + Math.round(r.bpm) + 'bpm_' + r.key.replace(/\s+/g, '') + '.mid'; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000); };
+    a.download = 'DM_Choir_' + safe + '_' + (r.fileTag || C.SPIRITS[r.spirit].name.replace(/[^\w]+/g, '')) + '_' + Math.round(r.bpm) + 'bpm_' + r.key.replace(/\s+/g, '') + '.mid'; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000); };
 })();
 </script>
 </body>

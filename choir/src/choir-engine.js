@@ -421,8 +421,8 @@
     const ev = [];
     const meta = (t, type, data) => ev.push({ t, o: 0, b: [0xff, type].concat(vlq(data.length), data) });
     meta(0, 0x03, str(name || 'Divine Choir')); meta(0, 0x02, str('Divine Monday'));
-    const us = Math.round(60000000 / res.bpm); meta(0, 0x51, [(us >> 16) & 255, (us >> 8) & 255, us & 255]);
-    meta(0, 0x58, [res.meter, 2, 24, 8]);
+    for (const tp of (res.tempos || [{ t: 0, us: Math.round(60000000 / res.bpm) }])) { const us = tp.us; meta(tp.t, 0x51, [(us >> 16) & 255, (us >> 8) & 255, us & 255]); }
+    meta(0, 0x58, [res.meter, Math.round(Math.log2(res.meterDen || 4)), 24, 8]);
     for (const m of res.markers) meta(m.t, 0x06, str(m.text));
     let lastCc = -1; for (const c of res.cc) { if (c.v === lastCc) continue; ev.push({ t: c.t, o: 1, b: [0xb0, 1, c.v] }); lastCc = c.v; }
     for (const n of res.notes) { ev.push({ t: n.t, o: 3, b: [0x90, n.p, n.v] }); ev.push({ t: n.t + n.d, o: 2, b: [0x80, n.p, 0] }); }
