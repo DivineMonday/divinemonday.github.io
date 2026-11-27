@@ -764,6 +764,19 @@ footer a{color:var(--mu)}
       const cand = secs.map((s, k) => k).filter((k) => k > 0 && k < cl - 1 && roles[k] !== 'rest').sort((a, b) => (/minuet|scherzo|waltz|march|trio|da capo/i.test(secs[b].label) - /minuet|scherzo|waltz|march|trio|da capo/i.test(secs[a].label)) || secs[a].dyn - secs[b].dyn);
       for (const k of cand) { if (quiet() >= want) break; if (roles[k - 1] === 'rest' || roles[k + 1] === 'rest') continue; roles[k] = 'rest'; }
     }
+    // a song is not a symphony: the choir knows verse from chorus
+    if (o.song) {
+      const type = (s) => (s.label.toLowerCase().match(/intro|verse|prechorus|chorus|build|drop|break|bridge|outro|fill/) || ['verse'])[0];
+      const nCh = secs.filter((s) => type(s) === 'chorus' || type(s) === 'drop').length; let ci = 0, vi = 0;
+      secs.forEach((s, k) => { const t = type(s), later = /later/.test(s.label);
+        if (t === 'intro' || t === 'fill') roles[k] = 'rest';
+        else if (t === 'verse') { roles[k] = vi++ === 0 || later ? 'rest' : pick(style === 'gospel' ? ['call', 'padHigh', 'rest'] : style === 'gregorian' ? ['drone', 'padLow', 'rest'] : ['padHigh', 'answer', 'rest', 'padLow']); }
+        else if (t === 'prechorus' || t === 'build') roles[k] = pick(style === 'gospel' ? ['stabs', 'unison'] : ['unison', 'pad', 'padHigh']);
+        else if (t === 'chorus' || t === 'drop') { roles[k] = ci === 0 ? (style === 'gospel' ? 'stabs' : 'tune') : 'tutti'; if (!later) ci++; if (ci === nCh && k === n - 1) roles[k] = 'finale'; }
+        else if (t === 'break' || t === 'bridge') roles[k] = pick(style === 'gregorian' ? ['drone', 'unison'] : ['padHigh', 'unison', 'canon', 'answer']);
+        else if (t === 'outro') roles[k] = 'finale'; });
+      if (!roles.includes('finale')) roles[n - 1] = 'finale';
+    }
     const fit = (r) => { if (both) return r; if (men) return { padHigh: 'pad', padLow: 'pad', canon: 'tune', drone: 'unison' }[r] || r; return { padLow: 'pad', drone: 'unison', canon: 'tune' }[r] || r; };
     secs.forEach((s, k) => { s.role = fit(roles[k]); s.start = s.from; if (['pad', 'padHigh', 'padLow', 'unison', 'tune'].includes(s.role) && s.to - s.from >= 12 && k > 0 && chance(0.35)) s.start = s.from + Math.floor((s.to - s.from) / 8) * 4; });
 
