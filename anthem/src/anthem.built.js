@@ -150,7 +150,7 @@
     return { genre: g, style, men, women, seed, era: g, tools, chain: [{ form: Object.values(tools).join('-') }] };
   }
   function build(p, hint) {
-    const s = D.newSong(p.genre, { seed: p.seed }); hint = hint || {}; if (p.avoid && p.avoid.length) s.avoid = p.avoid;
+    const s = D.newSong(p.genre, { seed: p.seed }); hint = hint || {}; if (p.avoid && p.avoid.length) s.avoid = p.avoid; if (p.recipeBan) s.recipeBan = p.recipeBan;
     if (hint.key) { const m = /^([A-Ga-g][#b]?)$/.exec(hint.key); if (m) { const minor = hint.key === hint.key.toLowerCase(), i = MAJ.findIndex((x) => x.toLowerCase() === hint.key.toLowerCase()); if (i >= 0) { s.key = { root: i, scale: minor ? 'minor' : 'major' }; s.keyAuto = false; } } }
     const G = D.GENRES[p.genre]; if (hint.bpm && G.bpm) { let b = hint.bpm; while (b < G.bpm[0]) b *= 2; while (b > G.bpm[1]) b /= 2; if (b >= G.bpm[0] && b <= G.bpm[1]) { s.bpm = Math.round(b); s.bpmAuto = false; } }
     const BT = D.barTicks(s), markers = []; let bar = 0; const cnt = {};
@@ -392,9 +392,9 @@
     r.file = padLast(withChoir(noConductor(bandMidi(s, markers, react(band(s, beat, r.p), r.choir, BT, s))), r.choir, 'Choir')); r.beat = beat; return r; }
   const BEATS = Object.keys(D.PLUGINS).filter((k) => { const p = D.PLUGINS[k]; return k !== 'plain' && (!p.parts || p.parts.includes('beat')); });
   function compose(o, onStep) {
-    const history = o.history || [], n = o.sketches || 4, base = o.seed || (Math.floor(Math.random() * 1e9) + 1), avoid = history.flatMap((h) => h.sigs || []); let best = null, i = 0;
+    const history = o.history || [], n = o.sketches || 4, base = o.seed || (Math.floor(Math.random() * 1e9) + 1), avoid = history.flatMap((h) => h.sigs || []), recipeBan = history.slice(-4).map((h) => h.recipe).filter(Boolean); let best = null, i = 0;
     return new Promise((resolve, reject) => { const step = () => { try {
-      const p = plan(o.genre, o.hint, (base + i * 7919) >>> 0); p.avoid = avoid; const s = build(p, Object.assign({}, o.hint, { beat: o.beat })), j = judge(s.A, s.choir, p, history);
+      const p = plan(o.genre, o.hint, (base + i * 7919) >>> 0); p.avoid = avoid; p.recipeBan = recipeBan; const s = build(p, Object.assign({}, o.hint, { beat: o.beat })), j = judge(s.A, s.choir, p, history);
       if (!best || j.score > best.j.score) best = { p, s, j }; i++; if (onStep) onStep(i, n);
       if (i < n) setTimeout(step, 20); else { const r = finish(best); r.beat = o.beat || 'gm'; resolve(r); } } catch (e) { reject(e); } }; setTimeout(step, 20); });
   }
@@ -403,7 +403,8 @@
     const file = padLast(withChoir(noConductor(s.bytes), s.choir, 'Choir')), G = D.GENRES[p.genre], key = NOTE[sg.key.root] + ' ' + sg.key.scale, who = p.men && p.women ? 'men and women' : p.men ? 'men' : 'women';
     const BT = D.barTicks(sg); let bar = 0; const parts = sg.sections.map((x) => { const r = { t: bar * BT, text: x.type }; bar += x.bars; return r; });
     let sigs = []; try { sigs = D.songSigs(D.renderSong(sg, 'melody', { polished: true }), sg).slice(0, 120); } catch (e) { /* no melody */ }
-    return { name, file, p, sigs, song: sg, choir: s.choir, A: s.A, judge: j, parts, seconds: Math.round(s.choir.seconds), title: G.name + ' · ' + key + ' · ' + Math.round(sg.bpm) + ' bpm',
+    const recipe = D.recipeOf ? D.recipeOf(sg, 'chorus') : null;
+    return { name, file, p, sigs, recipe, song: sg, choir: s.choir, A: s.A, judge: j, parts, seconds: Math.round(s.choir.seconds), title: G.name + ' · ' + key + ' · ' + Math.round(sg.bpm) + ' bpm',
       choices: [G.name, C.STYLES[p.style].name + ' choir, ' + who], fileName: ('DM_Anthem_' + name + '_' + G.name + '_' + NOTE[sg.key.root] + '_' + sg.key.scale + '_' + Math.round(sg.bpm) + 'bpm').replace(/[^\w]+/g, '_') + '.mid' };
   }
   // what a dropped file says, turned into a genre, and a key and tempo when it has them

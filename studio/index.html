@@ -1002,6 +1002,9 @@ function progFor(song, type, r) {
   const g = E.GENRES[song.genre];
   const pool = (type === 'chorus' || type === 'build' || type === 'drop' || type === 'prechorus') ? g.progs.chorus : g.progs.verse;
   let prog = r.pick(pool);
+  if (song.arr && rng(hash(song.seed || 0, type, 'ownprog'))() < 0.45) { const rr = rng(hash(song.seed || 0, type, 'prog')), T = [0, 5, 2], S = [3, 1], Dm = [4, 6], seq = [rr.pick([0, 0, 5, 3])];
+    while (seq.length < 4) { const p = seq[seq.length - 1], fn = T.includes(p) ? 'T' : S.includes(p) ? 'S' : 'D'; const nxt = fn === 'T' ? rr.pick(rr.chance(0.7) ? S.concat([5, 2]) : T) : fn === 'S' ? rr.pick(rr.chance(0.6) ? Dm : T.concat(S)) : rr.pick(rr.chance(0.7) ? [0, 5] : S); seq.push(nxt === p ? (nxt + 3) % 7 : nxt); }
+    prog = seq; }
   if (song.arr && (type === 'verse' || type === 'break' || type === 'intro') && ['techno', 'triphop', 'hiphop', 'newwave', 'free'].includes(song.genre) && rng(hash(song.seed, 'one', type))() < 0.25) prog = [0]; // one chord for a whole section: the groove does the talking
   if (prog.length !== song.L) { const out = []; for (let i = 0; i < song.L; i++) out.push(prog[i % prog.length]); prog = out; }
   return prog;
@@ -1325,6 +1328,38 @@ function motifRhythm(song, r, density, lenAvg) {
   if (!rh.length) rh.push({ s: 0, d: Math.min(4, N) });
   return rh;
 }
+/* ---------- melody recipes: a composer has many ways to invent a tune, so every song picks its own ---------- */
+// each recipe gives the moves of a line in scale steps; START says where in the range the line begins
+E.RECIPES = ['walk', 'gap', 'arp', 'run', 'rock', 'rep', 'cell', 'pedal', 'fall', 'climb', 'call', 'zig', 'float'];
+E.RECIPE_START = { walk: 0, gap: -3, arp: -4, run: -4, rock: 0, rep: 1, cell: -2, pedal: 0, fall: 4, climb: -3, call: -2, zig: -1, float: 0 };
+E.recipeOf = function (song, type) {
+  const ban = new Set(song.recipeBan || []), all = E.RECIPES.filter((k) => !ban.has(k)), pool = all.length >= 3 ? all : E.RECIPES;
+  const main = pool[hash(song.seed || 0, song.genre, 'recipe') % pool.length];
+  if (type === 'chorus' || type === 'drop' || type === 'build') return main;
+  const rest = pool.filter((k) => k !== main); return rest[hash(song.seed || 0, type, 'recipe2') % rest.length];
+};
+E.recipeSteps = function (kind, n, r) {
+  const out = [], sgn = r.chance(0.5) ? 1 : -1;
+  for (let i = 0; i < n; i++) { let st;
+    switch (kind) {
+      case 'gap': st = i === 0 ? 0 : i === 1 ? (r.chance(0.5) ? 4 : 3) : -1; break;
+      case 'arp': st = i === 0 ? 0 : i <= 3 ? 2 : -1; break;
+      case 'run': st = i === 0 ? 0 : i < n / 2 + 1 ? 1 : -1; break;
+      case 'rock': st = i === 0 ? 0 : i % 2 ? 1 : -1; break;
+      case 'rep': st = [0, 0, 1, 0, -1, 0, 0, -2][i % 8]; break;
+      case 'cell': st = i === 0 ? 0 : (i % 2 ? 2 : -1) * sgn; break;
+      case 'pedal': st = i === 0 ? 0 : (i % 2 ? 1 : -1) * (2 + Math.floor(i / 2)); break;
+      case 'fall': st = i === 0 ? 0 : r.chance(0.75) ? -1 : r.chance(0.5) ? -2 : 1; break;
+      case 'climb': st = i === 0 ? 0 : [1, 1, -1, 2][i % 4]; break;
+      case 'call': st = i === 0 ? 0 : i < n / 2 ? (r.chance(0.7) ? 1 : 2) : (r.chance(0.7) ? -1 : -2); break;
+      case 'zig': st = i === 0 ? 0 : i % 2 ? 3 : -2; break;
+      case 'float': st = i === 0 ? 0 : r.chance(0.5) ? 1 : -1; break;
+      default: st = r.chance(0.65) ? (r.chance(0.5) ? 1 : -1) : (r.chance(0.5) ? 2 : -2) * (r.chance(0.2) ? 2 : 1);
+    }
+    out.push(st); }
+  return out;
+};
+E.FORMS4 = [['A', 'A', 'A', 'B'], ['A', 'B', 'A', 'C'], ['A', 'A', 'B', 'C'], ['A', 'B', 'C', 'A'], ['A', 'B', 'B', 'A'], ['A', 'B', 'A', 'B'], ['A', 'A', 'B', 'A']];
 E.genMelody = function (song, type, ctx, seed) {
   const r = rng(seed);
   const g = E.GENRES[song.genre];
@@ -1347,16 +1382,14 @@ E.genMelody = function (song, type, ctx, seed) {
   // build motif (rhythm + contour as scale steps)
   const mot = [];
   for (let b = 0; b < motifLen; b++) motifRhythm(song, r, density, g.mel.len).forEach((x) => mot.push({ s: x.s + b * N, d: x.d }));
+  const recipe = song.arr ? E.recipeOf(song, type) : 'walk';
+  if (recipe === 'float' && mot.length > 3) { const kept = mot.filter((_, i) => i % 2 === 0); kept.forEach((x, i) => { const nx = i + 1 < kept.length ? kept[i + 1].s : motifLen * N; x.d = Math.max(x.d, Math.min(8, nx - x.s - 1)); }); mot.length = 0; kept.forEach((x) => mot.push(x)); }
   // anchor the phrase: a note on the first beat gives the line a clear start
   if (!mot.some((x) => x.s === 0) && mot.length) { const first = mot[0].s; mot.unshift({ s: 0, d: Math.max(1, Math.min(2, first)) }); }
-  let idx = nearestIdx(pool, (lo + hi) / 2 + r.int(5) - 2);
-  const contour = [];
-  for (let i = 0; i < mot.length; i++) {
-    const step = r.chance(0.65) ? (r.chance(0.5) ? 1 : -1) : (r.chance(0.5) ? 2 : -2) * (r.chance(0.2) ? 2 : 1);
-    contour.push(step);
-  }
+  let idx = clamp(nearestIdx(pool, (lo + hi) / 2 + r.int(5) - 2) + (E.RECIPE_START[recipe] || 0), 1, pool.length - 2);
+  const contour = E.recipeSteps(recipe, mot.length, r);
   const notes = [];
-  const form = L === 12 ? ['A', 'A', 'B', 'B', 'A', 'A'] : (type === 'chorus' ? ['A', 'A', 'A', 'B'] : ['A', 'B', 'A', 'C']);
+  const form = L === 12 ? ['A', 'A', 'B', 'B', 'A', 'A'] : song.arr ? E.FORMS4[hash(song.seed || 0, type, 'form') % E.FORMS4.length] : (type === 'chorus' ? ['A', 'A', 'A', 'B'] : ['A', 'B', 'A', 'C']);
   const reps = Math.ceil(L / motifLen);
   for (let rep = 0; rep < reps; rep++) {
     const tag = form[rep % form.length];
@@ -1785,17 +1818,18 @@ E.genSing = function (song, type, ctx, seed) {
   const line = () => { // one sung line: a pickup now and then, two to five notes, the last or one in the middle long
     const k = 3 + r.int(energy > 0.6 ? 4 : 3), out = []; let s = r.chance(0.35) ? -(2 + r.int(2)) : 0; // a pickup starts in the bar before
     const longAt = r.chance(0.6) ? k - 1 : 1 + r.int(Math.max(1, k - 1));
-    let step = r.chance(0.5) ? 2 : 1;
+    const moves = song.arr ? E.recipeSteps(E.recipeOf(song, type), k + 1, r) : null;
+    let step = moves ? moves[1] : r.chance(0.5) ? 2 : 1;
     for (let i = 0; i < k; i++) {
       const isLong = i === longAt, d = isLong ? r.pick([6, 8, 10, 12]) : r.pick([1, 2, 2, 3]);
       out.push({ s, d, iv: i === 0 ? 0 : step, bend: isLong && r.chance(blue ? 0.55 : 0.3), long: isLong });
-      s += d + (isLong ? 0 : r.chance(0.25) ? 1 : 0); step = r.chance(0.7) ? -1 : r.chance(0.5) ? -2 : 2;
+      s += d + (isLong ? 0 : r.chance(0.25) ? 1 : 0); step = moves ? moves[i + 2] || 0 : r.chance(0.7) ? -1 : r.chance(0.5) ? -2 : 2;
     }
     return out;
   };
   const A = line(), B = line(), notes = [];
   const lines = L === 12 ? [[0, A], [4, A], [8, B]] : L % 4 === 0 ? Array.from({ length: L / 2 }, (_, k) => [k * 2, k % 2 ? (r.chance(0.5) ? A : B) : A]) : [[0, A]];
-  let idx = nearestIdx(pool, hi - 4 - r.int(4));
+  let idx = song.arr ? clamp(nearestIdx(pool, (lo + hi) / 2) + (E.RECIPE_START[E.recipeOf(song, type)] || 0) + r.int(3) - 1, 1, pool.length - 2) : nearestIdx(pool, hi - 4 - r.int(4));
   lines.forEach(([bar, ln], li) => {
     let pi = idx + (ln === B ? 2 : 0) - (li % 2 && L !== 12 ? 1 : 0);
     ln.forEach((x) => {
@@ -3390,7 +3424,8 @@ E.freshen = function (notes, song, part, chordAt) {
 E.songSigs = (notes, song) => { const BT = E.barTicks(song), bars = new Map(); for (const n of notes) { if (n.ks) continue; const b = Math.floor((n.t + E.STEP / 2) / BT); (bars.get(b) || bars.set(b, []).get(b)).push(n); } return [...bars.entries()].filter(([, v]) => v.length >= 2).map(([b, v]) => E.barSig(v.sort((x, y) => x.t - y.t), b * BT)); };
 /* ---------- a line that sings: every song its own kind of melody; leaps get passing notes, repeated notes a neighbour ---------- */
 E.LINE_KINDS = ['sing', 'hook', 'leap', 'low'];
-E.lineKind = (song) => song.lineKind || E.LINE_KINDS[hash((song.parts.melody || {}).seed || song.name || 0, song.genre, 'line') % E.LINE_KINDS.length];
+E.RECIPE_LINE = { gap: 'leap', arp: 'leap', zig: 'leap', pedal: 'leap', rep: 'hook', cell: 'hook', run: 'sing', fall: 'sing', climb: 'sing', rock: 'sing', call: 'sing', float: 'low' };
+E.lineKind = (song) => song.lineKind || (song.arr && E.recipeOf && E.RECIPE_LINE[E.recipeOf(song, 'chorus')]) || E.LINE_KINDS[hash((song.parts.melody || {}).seed || song.name || 0, song.genre, 'line') % E.LINE_KINDS.length];
 E.singLine = function (notes, song, part) {
   const kind = E.lineKind(song), sc = E.SCALES[song.key.scale] || E.SCALES.minor, root = song.key.root, U = E.STEP;
   const inK = (p) => sc.includes(((p - root) % 12 + 12) % 12), step = (p, dir) => { let q = p + dir; while (!inK(q)) q += dir; return q; };

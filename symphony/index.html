@@ -606,6 +606,12 @@ function blendDNA(era, seed) {
     d.rh[4] = d.rh[4].concat(B.rh[4].slice(0, 2)); d.rh[3] = d.rh[3].concat(B.rh[3].slice(0, 1));
     for (const k of ['leapMul', 'wm', 'noise']) d[k] = A[k] * .75 + B[k] * .25; d.leap = Math.max(A.leap, B.leap - 1);
   }
+  // and a voice of its own: every piece favours a few shapes of its own, leaps more or less, and ends its phrases its own way
+  const ALLK = [...new Set(Object.values(DNA).flatMap(x => x.kinds.concat(x.kindsB)))], ALLE = [...new Set(Object.values(DNA).flatMap(x => x.ends))];
+  if (r() < .5) d.kinds.push(pick(r, ALLK)); if (r() < .4) d.kindsB.push(pick(r, ALLK));
+  if (!d.kindsB.length) d.kindsB = A.kindsB.slice(); if (r() < .4) d.ends.push(pick(r, ALLE)); if (!d.ends.length) d.ends = A.ends.slice();
+  d.leapMul *= .5 + r() * 1.1; d.wm *= 1.1 + r() * .9; d.noise *= .7 + r() * .7;
+  const rr = mkRng(strH(seed + ':rh')); d.rh[4] = d.rh[4].filter(() => rr() < .6); if (!d.rh[4].length) d.rh[4] = A.rh[4].slice(); d.rh[3] = d.rh[3].filter(() => rr() < .6); if (!d.rh[3].length) d.rh[3] = A.rh[3].slice();
   return d;
 }
 function rhPool(meter, ch, era, dna) {
