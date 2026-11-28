@@ -4531,10 +4531,17 @@ function tone(part, p, t, dur, v) {
   else { const o = ctx.createOscillator(); o.type = 'square'; o.frequency.value = mtof(p); lp.frequency.setValueAtTime(3200, t); lp.frequency.setTargetAtTime(1400, t, 0.15); o.connect(lp); env(g, t, 0.004, amp * 0.13, dur, 0.07); go(o); }
 }
 const barSec = (sg) => D.barTicks(sg) / D.PPQ * 60 / sg.bpm;
+// what you hear is what you export: the melodic parts play the same finished notes the MIDI file gets
+const HEARD = { key: '', parts: {} };
+function heardBar(sg, p, bar) {
+  const key = JSON.stringify(sg, (k, v) => (k === 'guide' ? undefined : v)); if (key !== HEARD.key) { HEARD.key = key; HEARD.parts = {}; }
+  if (!HEARD.parts[p]) { const BT = D.barTicks(sg), by = []; for (const n of D.renderSong(sg, p, { polished: true })) { const b = Math.max(0, Math.floor((n.t + BT / 32) / BT)); (by[b] = by[b] || []).push(Object.assign({}, n, { t: n.t - b * BT })); } HEARD.parts[p] = by; }
+  return HEARD.parts[p][bar] || [];
+}
 function scheduleBar(sg, bar, t0) {
   const R = D.makeRenderer(sg), tps = sg.bpm / 60 * D.PPQ;
   const hs = st.mode === 'edit' && AU.hearShadow && !sg.noShadows ? st.ePart : null;
-  for (const p of PARTS) { if (p !== hs && (sg.parts[p].mode === 'off' || st.mode === 'get' && st.solo && st.solo !== p)) continue; let notes; try { notes = p === hs ? shadowNotes(p, bar) : R.bar(p, bar); } catch (e) { console.error(e); continue; } let lastT = -1;
+  for (const p of PARTS) { if (p !== hs && (sg.parts[p].mode === 'off' || st.mode === 'get' && st.solo && st.solo !== p)) continue; let notes; try { notes = p === hs ? shadowNotes(p, bar) : p === 'beat' ? R.bar(p, bar) : heardBar(sg, p, bar); } catch (e) { console.error(e); continue; } let lastT = -1;
     for (const n of notes) { const t = t0 + Math.max(0, n.t) / tps; if (t < AU.ctx.currentTime) continue; if (p === 'beat') drumLane(n.lane, t, n.v); else tone(p, n.p, t, n.d / tps, n.v);
       if ((p !== 'beat' || (laneDefs()[n.lane] || { fold: 6 }).fold !== 6) && (p !== 'chords' && p !== 'pad' || Math.abs(t - lastT) > 0.02)) addRipple(p, t, n.v, n.lane); lastT = t; } }
   guideBar(sg, bar, t0);
@@ -5351,7 +5358,7 @@ function closeStart() { const el = $('#start'); if (el) el.remove(); }
 
 document.addEventListener('keydown', (e) => { if (e.target.closest && e.target.closest('input,textarea')) return; if (e.code === 'Space' && song() && !$('#start')) { e.preventDefault(); togglePlay(); } if ((e.metaKey || e.ctrlKey) && e.key === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); } if (e.key === 'Escape' && st.menu) { st.menu = false; renderMenu(); } });
 document.addEventListener('click', (e) => { if (st.menu && !e.target.closest('.menu') && !e.target.closest('[aria-label="Menu"]')) { st.menu = false; renderMenu(); } });
-window.DMS = { st, song, makeSong, setMode, playsMap, emptyWarning, startPlay, stopAll, render, buildPart, orchTracks };
+window.DMS = { st, song, makeSong, setMode, playsMap, emptyWarning, startPlay, stopAll, render, buildPart, orchTracks, heardBar };
 render(); openStart();
 /*BURPKIT*/
 /* Burp: one press, everything this machine can do thrown open: genres per layer, a feeling, a story, a chord style, a form, a tempo, new ideas */
