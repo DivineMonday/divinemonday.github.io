@@ -3335,9 +3335,44 @@ E.renderSong = function (song, part, opts) {
   if (part === 'bass' && !own && !opts.raw && !E.FREE_BASS.has((E.GENRES[s2.genre] || {}).bass)) { const chordPc = (b) => { let xs = []; try { xs = R.bar('chords', b, {}).concat(R.bar('pad', b, {})).filter((n) => !n.ks && n.p > 11); } catch (e) { /* no harmony here */ } if (!xs.length) return null; const pcs = new Set(xs.map((n) => n.p % 12)); return { low: xs.reduce((a, n) => (n.p < a.p ? n : a)).p % 12, pcs }; };
     const pk = E.bassPocket(out, s2, chordPc); out.length = 0; pk.forEach((n) => out.push(n)); }
   if ((part === 'melody' || part === 'answer') && !own && !opts.raw) E.foldLeaps(out, (E.GENRES[s2.genre].mel || {}).range || [55, 84]);
+  if ((part === 'melody' || part === 'answer') && !own && !opts.raw && E.singLine) { const sung = E.singLine(out, s2, part); out.length = 0; sung.forEach((n) => out.push(n)); }
   if ((part === 'melody' || part === 'answer') && song.voice && !opts.raw) { const kept = E.voiceRoom(out, s2, part); out.length = 0; kept.forEach((n) => out.push(n)); }
+  if (part === 'bass' && !own && !opts.raw && E.bassApproach) { const ap = E.bassApproach(out, s2); out.length = 0; ap.forEach((n) => out.push(n)); }
   if (part === 'bass' && E.bassMono && !(song.parts.bass && song.parts.bass.mode === 'yours')) return E.bassMono(out, E.liquidK(s2) >= 0.8 ? 'glide' : E.bassStyleOf ? E.bassStyleOf(s2) : ''); // across bar lines too
   return out;
+};
+/* ---------- a line that sings: every song its own kind of melody; leaps get passing notes, repeated notes a neighbour ---------- */
+E.LINE_KINDS = ['sing', 'hook', 'leap', 'low'];
+E.lineKind = (song) => song.lineKind || E.LINE_KINDS[hash((song.parts.melody || {}).seed || song.name || 0, song.genre, 'line') % E.LINE_KINDS.length];
+E.singLine = function (notes, song, part) {
+  const kind = E.lineKind(song), sc = E.SCALES[song.key.scale] || E.SCALES.minor, root = song.key.root, U = E.STEP;
+  const inK = (p) => sc.includes(((p - root) % 12 + 12) % 12), step = (p, dir) => { let q = p + dir; while (!inK(q)) q += dir; return q; };
+  let h = hash((song.parts[part] || {}).seed || 0, part, 'sing'); const rnd = () => { h = (Math.imul(h ^ (h >>> 15), 2246822519) + 0x6D2B79F5) >>> 0; return ((h ^ (h >>> 13)) >>> 0) / 4294967296; };
+  const pFill = ({ sing: 0.8, hook: 0.35, leap: 0.15, low: 0.55 }[kind]) * (part === 'answer' ? 0.6 : 1), pNb = { sing: 0.55, hook: 0.15, leap: 0.1, low: 0.4 }[kind];
+  const ks = notes.filter((n) => n.ks), ns = notes.filter((n) => !n.ks).map((n) => Object.assign({}, n)).sort((a, b) => a.t - b.t), add = [];
+  for (let i = 0; i + 1 < ns.length; i++) { const n = ns[i], nx = ns[i + 1], gap = nx.t - n.t, d = nx.p - n.p, ad = Math.abs(d);
+    if (gap < 2 * U || gap > 16 * U) continue;
+    if (ad >= 3 && ad <= 7 && rnd() < pFill) { const pass = []; let q = n.p; for (;;) { q = step(q, Math.sign(d)); if (d > 0 ? q >= nx.p : q <= nx.p) break; pass.push(q); }
+      const slots = Math.min(pass.length, Math.floor(gap / U) - 1, 3); if (slots < 1) continue; const unit = Math.max(U, Math.min(2 * U, Math.floor(gap / (slots + 1) / U) * U)), use = pass.slice(pass.length - slots);
+      n.d = Math.min(n.d, gap - slots * unit); use.forEach((p, k) => add.push({ t: nx.t - (slots - k) * unit, d: unit - 10, v: Math.max(1, n.v - 10 - k * 2), p, pass: true }));
+    } else if (ad === 0 && rnd() < pNb) { const half = Math.floor(gap / 2 / U) * U; if (half < U) continue; n.d = Math.min(n.d, half);
+      add.push({ t: n.t + half, d: Math.min(half, gap - half) - 10, v: Math.max(1, n.v - 8), p: step(n.p, rnd() < 0.6 ? 1 : -1), pass: true }); } }
+  let out = ns.concat(add).sort((a, b) => a.t - b.t);
+  if (kind === 'low' && part === 'melody' && out.length) { const med = out.map((n) => n.p).sort((a, b) => a - b)[out.length >> 1]; if (med >= 74) out.forEach((n) => { if (n.p - 12 >= 55) n.p -= 12; }); }
+  if (kind === 'hook') { const BT = E.barTicks(song); out.forEach((n) => { const o = n.t % BT; n.v = Math.max(1, Math.min(127, n.v + (o % (4 * U) === 0 ? 10 : o % (2 * U) === 0 ? 0 : -8))); }); }
+  return out.concat(ks);
+};
+/* ---------- the bass walks into a new chord: a long note before a bigger move gets an approach note ---------- */
+E.GRID_BASS = new Set(['offbeat', 'acid', 'rolling', 'euro', 'ebm', 'organ', 'reese', 'garage']);
+E.bassApproach = function (notes, song) {
+  if (E.GRID_BASS.has((E.GENRES[song.genre] || {}).bass)) return notes.slice();
+  const sc = E.SCALES[song.key.scale] || E.SCALES.minor, root = song.key.root, U = E.STEP, BT = E.barTicks(song);
+  const inK = (p) => sc.includes(((p - root) % 12 + 12) % 12), step = (p, dir) => { let q = p + dir; while (!inK(q)) q += dir; return q; };
+  let h = hash((song.parts.bass || {}).seed || 0, 'walk'); const rnd = () => { h = (Math.imul(h ^ (h >>> 15), 2246822519) + 0x6D2B79F5) >>> 0; return ((h ^ (h >>> 13)) >>> 0) / 4294967296; };
+  const ks = notes.filter((n) => n.ks), ns = notes.filter((n) => !n.ks).map((n) => Object.assign({}, n)).sort((a, b) => a.t - b.t), add = [];
+  for (let i = 0; i + 1 < ns.length; i++) { const a = ns[i], b = ns[i + 1]; if (b.t % BT !== 0 || b.t - a.t < 6 * U || a.d < 4 * U || Math.abs(b.p - a.p) < 3 || rnd() > 0.45) continue;
+    const t = b.t - 2 * U; a.d = Math.min(a.d, t - a.t - 10); add.push({ t, d: 2 * U - 10, v: Math.max(1, b.v - 14), p: step(b.p, b.p > a.p ? -1 : 1), pass: true }); }
+  return ns.concat(add).sort((a, b) => a.t - b.t).concat(ks);
 };
 E.polishedSong = function (song) {
   const s = clone(song);
@@ -5353,14 +5388,20 @@ if (typeof module !== 'undefined') module.exports = E;
     for (const tr of tracks) { const k = tr.part === 'beat' ? 0.6 : 1; for (const n of tr.notes) { const x = secs.find((y) => n.t >= y.from * BT && n.t < y.to * BT); if (x) n.v = clampV(n.v * (1 + (f(x, n.t) - 1) * k)); } }
   }
   // a last listen: where a held melody note rubs a half step against the band, the band makes room
-  function clean(Q, BT) {
+  function clean(Q, BT, sung) {
     const semi = (a, b) => [1, 11].includes(((a - b) % 12 + 12) % 12), at = (ns, t) => ns.filter((o) => o.t <= t && o.t + o.d > t);
+    // short melody notes and anything against the choir: the melody moves to the nearest note that does not rub
+    for (const n of Q.melody.notes) { if (n.d < BT / 32) continue; const mid = n.t + Math.min(n.d / 2, BT / 8), short = n.d < BT / 8;
+      const ring = (short ? [Q.bass.notes, Q.chords.notes, Q.pad.notes, sung || []] : [sung || []]).flatMap((ns) => at(ns, mid));
+      if (!ring.some((o) => semi(o.p, n.p))) continue; const all = [Q.bass.notes, Q.chords.notes, Q.pad.notes, sung || []].flatMap((ns) => at(ns, mid));
+      for (const k of [1, -1, 2, -2, 3, -3]) if (!all.some((o) => semi(o.p, n.p + k))) { n.p += k; break; } }
     for (const n of Q.melody.notes) { if (n.d < BT / 8) continue; const mid = n.t + Math.min(n.d / 2, BT / 8);
       const bass = at(Q.bass.notes, mid); if (bass.some((o) => semi(o.p, n.p))) { const up = bass.some((o) => semi(o.p, n.p + 1)) ? -1 : 1; n.p += up; if (bass.some((o) => semi(o.p, n.p))) n.p -= 2 * up; }
       Q.pad.notes = Q.pad.notes.filter((o) => !(o.t <= mid && o.t + o.d > mid && semi(o.p, n.p)));
       const ch = at(Q.chords.notes, mid); for (const o of ch) if (semi(o.p, n.p) && ch.length >= 3) o.dead = 1;
       for (const o of at(Q.answer.notes, mid)) if (semi(o.p, n.p)) o.p += ((o.p - n.p) % 12 + 12) % 12 === 1 ? 1 : -1; }
     Q.chords.notes = Q.chords.notes.filter((o) => !o.dead);
+    for (const n of Q.melody.notes) while (n.p < 52) n.p += 12; // the melody stays above the band
   }
   // the band listens back to the choir: under held choir chords the pad steps away, where the choir sings the tune the melody
   // moves to a harmony below it, and the answer only speaks in the choir's breaths
@@ -5374,10 +5415,10 @@ if (typeof module !== 'undefined') module.exports = E;
     Q.pad.notes = Q.pad.notes.filter((n) => !(sing.has(bar(n)) && HOLDS.has(role[bar(n)]))); for (const n of Q.pad.notes) if (sing.has(bar(n))) n.v = clampV(n.v * 0.8);
     for (const n of Q.melody.notes) { const b = bar(n); if (!sing.has(b) || !CARRIES.has(role[b])) continue; n.v = clampV(n.v * 0.8);
       if (H) { const pcs = H.at(n.t); let q = null; for (const d of [3, 4, 5]) if (pcs.has(((n.p - d) % 12 + 12) % 12)) { q = n.p - d; break; } n.p = q != null ? q : H.step(n.p, -2);
-        if (choir.notes.some((c) => c.t <= n.t && c.t + c.d > n.t && Math.abs(c.p - n.p) <= 2)) n.p -= 12; } }
+        if (choir.notes.some((c) => c.t <= n.t && c.t + c.d > n.t && Math.abs(c.p - n.p) <= 2)) n.p = n.p - 12 >= 52 ? n.p - 12 : n.p + 12; } }
     Q.answer.notes = Q.answer.notes.filter((n) => !sing.has(bar(n)) || !CARRIES.has(role[bar(n)]) || !near(n.t, PPQ / 4)); for (const n of Q.answer.notes) if (sing.has(bar(n))) n.v = clampV(n.v * 0.85);
     if (!Q.answer.notes.length && tracks.find((t) => t.part === 'answer').notes.length) Q.answer.notes = tracks.find((t) => t.part === 'answer').notes.slice(0, 4).map((n) => Object.assign({}, n));
-    clean(Q, BT); return out;
+    clean(Q, BT, choir.notes); return out;
   }
   // the same song again with the beat for another drum app; the choir stays as it was
   function rebeat(r, beat) { const s = r.song, BT = D.barTicks(s), markers = []; let bar = 0; const cnt = {};

@@ -353,14 +353,20 @@
     for (const tr of tracks) { const k = tr.part === 'beat' ? 0.6 : 1; for (const n of tr.notes) { const x = secs.find((y) => n.t >= y.from * BT && n.t < y.to * BT); if (x) n.v = clampV(n.v * (1 + (f(x, n.t) - 1) * k)); } }
   }
   // a last listen: where a held melody note rubs a half step against the band, the band makes room
-  function clean(Q, BT) {
+  function clean(Q, BT, sung) {
     const semi = (a, b) => [1, 11].includes(((a - b) % 12 + 12) % 12), at = (ns, t) => ns.filter((o) => o.t <= t && o.t + o.d > t);
+    // short melody notes and anything against the choir: the melody moves to the nearest note that does not rub
+    for (const n of Q.melody.notes) { if (n.d < BT / 32) continue; const mid = n.t + Math.min(n.d / 2, BT / 8), short = n.d < BT / 8;
+      const ring = (short ? [Q.bass.notes, Q.chords.notes, Q.pad.notes, sung || []] : [sung || []]).flatMap((ns) => at(ns, mid));
+      if (!ring.some((o) => semi(o.p, n.p))) continue; const all = [Q.bass.notes, Q.chords.notes, Q.pad.notes, sung || []].flatMap((ns) => at(ns, mid));
+      for (const k of [1, -1, 2, -2, 3, -3]) if (!all.some((o) => semi(o.p, n.p + k))) { n.p += k; break; } }
     for (const n of Q.melody.notes) { if (n.d < BT / 8) continue; const mid = n.t + Math.min(n.d / 2, BT / 8);
       const bass = at(Q.bass.notes, mid); if (bass.some((o) => semi(o.p, n.p))) { const up = bass.some((o) => semi(o.p, n.p + 1)) ? -1 : 1; n.p += up; if (bass.some((o) => semi(o.p, n.p))) n.p -= 2 * up; }
       Q.pad.notes = Q.pad.notes.filter((o) => !(o.t <= mid && o.t + o.d > mid && semi(o.p, n.p)));
       const ch = at(Q.chords.notes, mid); for (const o of ch) if (semi(o.p, n.p) && ch.length >= 3) o.dead = 1;
       for (const o of at(Q.answer.notes, mid)) if (semi(o.p, n.p)) o.p += ((o.p - n.p) % 12 + 12) % 12 === 1 ? 1 : -1; }
     Q.chords.notes = Q.chords.notes.filter((o) => !o.dead);
+    for (const n of Q.melody.notes) while (n.p < 52) n.p += 12; // the melody stays above the band
   }
   // the band listens back to the choir: under held choir chords the pad steps away, where the choir sings the tune the melody
   // moves to a harmony below it, and the answer only speaks in the choir's breaths
@@ -374,10 +380,10 @@
     Q.pad.notes = Q.pad.notes.filter((n) => !(sing.has(bar(n)) && HOLDS.has(role[bar(n)]))); for (const n of Q.pad.notes) if (sing.has(bar(n))) n.v = clampV(n.v * 0.8);
     for (const n of Q.melody.notes) { const b = bar(n); if (!sing.has(b) || !CARRIES.has(role[b])) continue; n.v = clampV(n.v * 0.8);
       if (H) { const pcs = H.at(n.t); let q = null; for (const d of [3, 4, 5]) if (pcs.has(((n.p - d) % 12 + 12) % 12)) { q = n.p - d; break; } n.p = q != null ? q : H.step(n.p, -2);
-        if (choir.notes.some((c) => c.t <= n.t && c.t + c.d > n.t && Math.abs(c.p - n.p) <= 2)) n.p -= 12; } }
+        if (choir.notes.some((c) => c.t <= n.t && c.t + c.d > n.t && Math.abs(c.p - n.p) <= 2)) n.p = n.p - 12 >= 52 ? n.p - 12 : n.p + 12; } }
     Q.answer.notes = Q.answer.notes.filter((n) => !sing.has(bar(n)) || !CARRIES.has(role[bar(n)]) || !near(n.t, PPQ / 4)); for (const n of Q.answer.notes) if (sing.has(bar(n))) n.v = clampV(n.v * 0.85);
     if (!Q.answer.notes.length && tracks.find((t) => t.part === 'answer').notes.length) Q.answer.notes = tracks.find((t) => t.part === 'answer').notes.slice(0, 4).map((n) => Object.assign({}, n));
-    clean(Q, BT); return out;
+    clean(Q, BT, choir.notes); return out;
   }
   // the same song again with the beat for another drum app; the choir stays as it was
   function rebeat(r, beat) { const s = r.song, BT = D.barTicks(s), markers = []; let bar = 0; const cnt = {};
