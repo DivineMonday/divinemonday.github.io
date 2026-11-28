@@ -87,8 +87,8 @@
     return out;
   }
 
-  function sketch(p) {
-    const g = Y.generate({ form: 'suite', era: p.era, key: p.key, len: p.len, seed: p.seed, chain: p.chain, feel: p.feel || undefined, inst: TEMPLATE });
+  function sketch(p, avoid) {
+    const g = Y.generate({ form: 'suite', era: p.era, key: p.key, len: p.len, seed: p.seed, chain: p.chain, feel: p.feel || undefined, inst: TEMPLATE, avoid });
     const m = g.movements[0], bytes = Y.writeMidi(m, m.tracks.map((t) => t.id));
     const choir = C.follow(bytes, { style: p.style, men: p.men, women: p.women, seed: p.seed ^ 0x5bd1e995, silence: 0.4 });
     return { m, bytes, choir, A: C.analyseMidi(bytes) };
@@ -96,12 +96,12 @@
 
   // compose: several sketches, judged, the best one kept; works in steps so the page stays alive
   function compose(o, onStep) {
-    const history = o.history || [], n = o.sketches || 4, base = o.seed || (Math.floor(Math.random() * 1e9) + 1);
+    const history = o.history || [], n = o.sketches || 4, base = o.seed || (Math.floor(Math.random() * 1e9) + 1), avoid = history.flatMap((h) => h.sigs || []);
     let best = null, i = 0;
     return new Promise((resolve, reject) => {
       const step = () => {
         try {
-          const p = plan(o.feel, o.hint, (base + i * 7919) >>> 0), s = sketch(p), j = judge(s.A, s.choir, p, history);
+          const p = plan(o.feel, o.hint, (base + i * 7919) >>> 0), s = sketch(p, avoid), j = judge(s.A, s.choir, p, history);
           if (!best || j.score > best.j.score) best = { p, s, j };
           i++; if (onStep) onStep(i, n);
           if (i < n) setTimeout(step, 20); else resolve(finish(best));
@@ -116,7 +116,8 @@
     const secs = Math.round(s.choir.seconds), fe = p.feel ? Y.FEELINGS[p.feel].name : null;
     const parts = (m.markers || []).filter((x) => /^\d+\. /.test(x.text)).map((x) => ({ t: x.t, text: x.text.replace(/^\d+\. /, '') }));
     const who = p.men && p.women ? 'men and women' : p.men ? 'men' : 'women';
-    return { name, file, p, m, choir: s.choir, A: s.A, judge: j, parts, seconds: secs,
+    const sigs = (m.parts || []).flatMap((x) => (x._c && x._c.sigs) || []).slice(0, 120);
+    return { name, file, p, m, sigs, choir: s.choir, A: s.A, judge: j, parts, seconds: secs,
       title: (p.chain.length === 4 ? 'Symphony' : 'Triptych') + ' in ' + m.title.replace(/^Suite in /, ''),
       choices: [fe, ERA_NAME[p.era] + ' orchestra', p.chain.map((c) => Y.FORMS[c.form].name).join(', '), C.STYLES[p.style].name + ' choir, ' + who].filter(Boolean),
       fileName: ('DM_Opus_' + name + '_' + m.title.replace(/^Suite in /, '').replace(/♯/g, 'sharp').replace(/♭/g, 'b') + '_' + Math.round(m.tempo) + 'bpm').replace(/[^\w]+/g, '_') + '.mid' };

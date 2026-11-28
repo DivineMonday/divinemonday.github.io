@@ -3350,12 +3350,44 @@ E.renderSong = function (song, part, opts) {
   if (part === 'bass' && !own && !opts.raw && !E.FREE_BASS.has((E.GENRES[s2.genre] || {}).bass)) { const chordPc = (b) => { let xs = []; try { xs = R.bar('chords', b, {}).concat(R.bar('pad', b, {})).filter((n) => !n.ks && n.p > 11); } catch (e) { /* no harmony here */ } if (!xs.length) return null; const pcs = new Set(xs.map((n) => n.p % 12)); return { low: xs.reduce((a, n) => (n.p < a.p ? n : a)).p % 12, pcs }; };
     const pk = E.bassPocket(out, s2, chordPc); out.length = 0; pk.forEach((n) => out.push(n)); }
   if ((part === 'melody' || part === 'answer') && !own && !opts.raw) E.foldLeaps(out, (E.GENRES[s2.genre].mel || {}).range || [55, 84]);
+  if ((part === 'melody' || part === 'answer') && !own && !opts.raw && E.freshen) { const chordAt = (b) => { try { const xs = R.bar('chords', b, {}).concat(R.bar('pad', b, {})).filter((n) => !n.ks && n.p > 11); return new Set(xs.map((n) => n.p % 12)); } catch (e) { return new Set(); } };
+    const fr = E.freshen(out, s2, part, chordAt); out.length = 0; fr.forEach((n) => out.push(n)); }
   if ((part === 'melody' || part === 'answer') && !own && !opts.raw && E.singLine) { const sung = E.singLine(out, s2, part); out.length = 0; sung.forEach((n) => out.push(n)); }
   if ((part === 'melody' || part === 'answer') && song.voice && !opts.raw) { const kept = E.voiceRoom(out, s2, part); out.length = 0; kept.forEach((n) => out.push(n)); }
   if (part === 'bass' && !own && !opts.raw && E.bassApproach) { const ap = E.bassApproach(out, s2); out.length = 0; ap.forEach((n) => out.push(n)); }
   if (part === 'bass' && E.bassMono && !(song.parts.bass && song.parts.bass.mode === 'yours')) return E.bassMono(out, E.liquidK(s2) >= 0.8 ? 'glide' : E.bassStyleOf ? E.bassStyleOf(s2) : ''); // across bar lines too
   return out;
 };
+/* ---------- a song that develops: a bar heard before comes back changed (a sequence, a mirror, a new ending, another rhythm),
+   and figures from songs it already gave you (song.avoid) are changed the first time; so every song tells its own story ---------- */
+E.barSig = (ns, t0) => ns.map((n) => Math.round((n.t - t0) / 30) + ':' + (n.p - ns[0].p)).join(' ');
+E.freshen = function (notes, song, part, chordAt) {
+  const BT = E.barTicks(song), U = E.STEP, sc = E.SCALES[song.key.scale] || E.SCALES.minor, root = song.key.root, beat = E.PPQ;
+  const inK = (p) => sc.includes(((p - root) % 12 + 12) % 12), step = (p, k) => { let q = p; const dir = Math.sign(k); for (let i = 0; i < Math.abs(k); i++) { q += dir; while (!inK(q)) q += dir; } return q; };
+  let h = hash((song.parts[part] || {}).seed || 0, song.seed || 0, part, 'fresh'); const rnd = () => { h = (Math.imul(h ^ (h >>> 15), 2246822519) + 0x6D2B79F5) >>> 0; return ((h ^ (h >>> 13)) >>> 0) / 4294967296; };
+  const ks = notes.filter((n) => n.ks), ns = notes.filter((n) => !n.ks).map((n) => Object.assign({}, n)).sort((a, b) => a.t - b.t);
+  const avoid = new Set(song.avoid || []), seen = {}, bars = new Map();
+  for (const n of ns) { const b = Math.floor((n.t + U / 2) / BT); (bars.get(b) || bars.set(b, []).get(b)).push(n); }
+  const fit = (n, b) => { const pcs = chordAt ? chordAt(b) : null; const strong = (n.t % beat) < 30 || n.d >= beat; if (strong && pcs && pcs.size) { for (let d = 0; d < 6; d++) { if (pcs.has(((n.p + d) % 12 + 12) % 12)) { n.p += d; return; } if (pcs.has(((n.p - d) % 12 + 12) % 12)) { n.p -= d; return; } } } if (!inK(n.p)) n.p = step(n.p, 1); };
+  const OPS = ['seq', 'mirror', 'tail', 'rhythm', 'seq', 'tail'];
+  const keep = [];
+  for (const [b, bn] of [...bars.entries()].sort((a, c) => a[0] - c[0])) {
+    const sig = E.barSig(bn, b * BT), k = seen[sig] = (seen[sig] || 0) + 1, fromBefore = avoid.has(sig);
+    if (bn.length < 2 || (!fromBefore && (k <= 2 || rnd() < 0.25))) { keep.push(...bn); continue; }
+    const op = OPS[(k + Math.floor(rnd() * OPS.length)) % OPS.length], first = bn[0].p;
+    if (op === 'seq') { const by = rnd() < 0.5 ? 1 : -1; for (const n of bn) n.p = step(n.p, by * (rnd() < 0.7 ? 1 : 2)); }
+    else if (op === 'mirror') { for (const n of bn) n.p = first - (n.p - first); }
+    else if (op === 'tail') { const tail = bn.slice(Math.max(1, Math.ceil(bn.length / 2))); const dir = rnd() < 0.5 ? 1 : -1; tail.forEach((n, i) => { n.p = step(n.p, dir * (i + 1)); }); }
+    else { // rhythm: two short neighbours merge, or the longest note splits
+      const i = bn.findIndex((n, j) => j + 1 < bn.length && n.d <= beat / 2 && bn[j + 1].d <= beat / 2);
+      if (i >= 0 && rnd() < 0.5) { bn[i].d = bn[i + 1].t + bn[i + 1].d - bn[i].t; bn.splice(i + 1, 1); }
+      else { const L = bn.reduce((a, n) => (n.d > a.d ? n : a)); if (L.d >= beat) { const half = Math.round(L.d / 2 / U) * U; bn.push({ t: L.t + half, d: L.d - half, v: Math.max(1, L.v - 8), p: step(L.p, rnd() < 0.5 ? 1 : -1) }); L.d = half; } } }
+    while (Math.max(...bn.map((n) => n.p)) > 96) bn.forEach((n) => { n.p -= 12; }); while (Math.min(...bn.map((n) => n.p)) < 36) bn.forEach((n) => { n.p += 12; });
+    bn.forEach((n) => fit(n, b)); keep.push(...bn);
+  }
+  return keep.sort((a, b) => a.t - b.t).concat(ks);
+};
+E.songSigs = (notes, song) => { const BT = E.barTicks(song), bars = new Map(); for (const n of notes) { if (n.ks) continue; const b = Math.floor((n.t + E.STEP / 2) / BT); (bars.get(b) || bars.set(b, []).get(b)).push(n); } return [...bars.entries()].filter(([, v]) => v.length >= 2).map(([b, v]) => E.barSig(v.sort((x, y) => x.t - y.t), b * BT)); };
 /* ---------- a line that sings: every song its own kind of melody; leaps get passing notes, repeated notes a neighbour ---------- */
 E.LINE_KINDS = ['sing', 'hook', 'leap', 'low'];
 E.lineKind = (song) => song.lineKind || E.LINE_KINDS[hash((song.parts.melody || {}).seed || song.name || 0, song.genre, 'line') % E.LINE_KINDS.length];

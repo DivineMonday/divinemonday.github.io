@@ -2403,6 +2403,29 @@ function breakCliche(c) {
     i += 4;
   }
 }
+/* a piece that develops: a bar of melody heard twice already comes back changed (a sequence, a mirror, a new ending),
+   and bars it already gave you in earlier pieces (o.avoid) change the first time; restated themes keep their first bar */
+Y.barSig = (ns, t0) => ns.map(n => Math.round((n.t - t0) / 30) + ':' + (n.m - ns[0].m)).join(' ');
+function developMel(c, avoid) {
+  const M = c.mel, BT = c.bar, r = mkRng(c.x.seed * 71 + 5), A = new Set(avoid || []), seen = {}, bars = new Map();
+  for (const n of M) { const b = Math.floor((n.t + 60) / BT); (bars.get(b) || bars.set(b, []).get(b)).push(n); }
+  for (const [b, bn] of [...bars.entries()].sort((a, d) => a[0] - d[0])) {
+    if (bn.length < 2) continue; const sig = Y.barSig(bn, b * BT), k = seen[sig] = (seen[sig] || 0) + 1;
+    if (!A.has(sig) && (k <= 2 || r() < .25)) continue;
+    const ph = bn[0].ph, K = (ph && ph.key) || c.x.K, sc = new Set(K.sc.map(v => mod(K.t + v, 12)));
+    const step = (p, d) => { let q = p; const s = Math.sign(d); for (let i = 0; i < Math.abs(d); i++) { q += s; while (!sc.has(mod(q, 12))) q += s; } return q; };
+    const op = ['seq', 'mirror', 'tail'][Math.floor(r() * 3)], first = bn[0].m;
+    if (op === 'seq') { const by = r() < .5 ? 1 : -1; bn.forEach(n => { n.m = step(n.m, by); }); }
+    else if (op === 'mirror') bn.forEach(n => { n.m = first - (n.m - first); });
+    else { const dir = r() < .5 ? 1 : -1; bn.slice(Math.ceil(bn.length / 2)).forEach((n, i) => { n.m = step(n.m, dir * (i + 1)); }); }
+    const lo = c.style.melLo, hi = c.style.melHi;
+    bn.forEach(n => { while (n.m > hi) n.m -= 12; while (n.m < lo) n.m += 12;
+      const ev = evAt(c.events, n.t), strong = n.dur >= PPQ || (n.t % PPQ) < 30;
+      if (strong && ev && ev.pcs) { for (let d = 0; d < 6; d++) { if (ev.pcs.has(mod(n.m + d, 12))) { n.m += d; break; } if (ev.pcs.has(mod(n.m - d, 12))) { n.m -= d; break; } } }
+      else if (!sc.has(mod(n.m, 12))) n.m = step(n.m, 1); });
+  }
+  c.sigs = [...bars.entries()].filter(([, v]) => v.length >= 2).map(([b, v]) => Y.barSig(v, b * BT));
+}
 function compose(o) {
   const era = ERAS[o.era] ? o.era : 'classical';
   const form = FORMS[o.form] ? o.form : 'minuet';
@@ -2425,6 +2448,7 @@ function compose(o) {
   genBass(c);
   genMel(c);
   breakCliche(c);
+  developMel(c, o.avoid);
   genBass(c, true);
   bassForMelPhrases(c);
   voiceAll(c);

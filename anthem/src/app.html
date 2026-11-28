@@ -115,7 +115,7 @@ footer a{color:var(--mu)}
     try {
       const hist = store.get('hist', []);
       const r = await O.compose({ genre: $('#genre').value || null, beat: $('#beat').value, hint, history: hist, sketches: 4, seed }, (i, n) => { $('#status').textContent = 'Sketching ' + i + ' of ' + n + ', keeping the best…'; });
-      store.set('hist', hist.concat([{ figs: r.judge.figs, combo: r.judge.combo }]).slice(-20));
+      store.set('hist', hist.concat([{ figs: r.judge.figs, combo: r.judge.combo, sigs: r.sigs }]).slice(-20));
       if (!own && last) $('#nm').value = newName(); const old = r.name; r.name = $('#nm').value.trim() || r.name; r.fileName = r.fileName.replace(old.replace(/[^\w]+/g, '_'), r.name.replace(/[^\w]+/g, '_')); own = false; store.set('own', false); store.set('name', $('#nm').value);
       last = r; show(r); $('#status').textContent = '';
     } catch (e) { console.error(e); $('#status').textContent = 'Something went wrong: ' + e.message; }
