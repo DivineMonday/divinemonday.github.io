@@ -50,6 +50,12 @@ ol{margin:10px 0 0;padding-left:22px;color:var(--mu)}ol li{margin:3px 0}
 footer{color:var(--mu);font-size:13px;margin-top:34px;text-align:center}
 footer a{color:var(--mu)}
 @media (max-width:600px){h1{font-size:44px}.go{width:100%}}
+.live{margin-top:18px;padding-top:14px;border-top:1px solid var(--line, rgba(127,127,127,.25))}
+.liveHead{font-weight:700;letter-spacing:.04em;text-transform:uppercase;font-size:13px;margin-bottom:4px}
+.liveHint{font-size:13px;opacity:.75;margin-bottom:8px}
+.liveName{font-weight:700;margin-top:10px}
+.liveGo{flex:0 0 auto;width:auto;padding-left:22px;padding-right:22px;margin:0 0 0 10px}
+.live .row select#liveMin{flex:0 0 auto;width:auto;min-width:0}
 </style>
 </head>
 <body>
@@ -72,6 +78,12 @@ footer a{color:var(--mu)}
   <div class="chips" id="oChips"></div>
   <canvas id="strip" width="1800" height="380"></canvas>
   <div class="row" style="justify-content:flex-start"><button class="dl" id="dl" type="button">↓ MIDI</button><button class="again" id="again" type="button">Another one</button></div>
+  <div class="live">
+    <div class="liveHead">Live</div>
+    <div class="liveHint">The machine plays this track like an artist on stage: it teases, pulls things forward, digs in, storms and comes home.</div>
+    <div class="row" style="justify-content:flex-start"><select id="liveMin" aria-label="Minutes"></select><button class="go liveGo" id="liveGo" type="button">Play it live</button></div>
+    <div class="liveOut" id="liveOut" hidden><div class="liveName" id="liveName"></div><div class="meta" id="liveMeta"></div><button class="dl" id="liveDl" type="button">↓ MIDI</button></div>
+  </div>
   <ol>
     <li>Drag the MIDI into Studio One; Beat, Bass, Chords, Pad, Melody, Answer and Choir each land on their own track, always in that order.</li>
     <li>Put your drums on Beat, your instruments on the others, and Olympus Micro on the Choir track.</li>
@@ -121,7 +133,7 @@ footer a{color:var(--mu)}
     } catch (e) { console.error(e); $('#status').textContent = 'Something went wrong: ' + e.message; }
     $('#go').disabled = false; $('#again').disabled = false;
   };
-  const show = (r) => {
+  const show = (r) => { $('#liveOut').hidden = true;
     $('#out').hidden = false; $('#oName').textContent = r.name;
     $('#oMeta').textContent = r.title + ' · ' + Math.floor(r.seconds / 60) + ':' + String(r.seconds % 60).padStart(2, '0');
     $('#oChips').innerHTML = r.choices.map((c) => '<span>' + c + '</span>').join('');
@@ -138,6 +150,13 @@ footer a{color:var(--mu)}
     const Z = ch.zones; for (const n of ch.notes) { const k = n.voice === 'S' || n.voice === 'A' ? 1 : 2; g.fillStyle = rows[k][1].trim(); g.globalAlpha = 0.35 + 0.65 * n.v / 127; g.fillRect(x0 + n.t / total * w, top + k * rh + 8, Math.max(2, n.d / total * w), rh - 16); } g.globalAlpha = 1;
   };
   $('#go').onclick = run; $('#again').onclick = run;
+  for (let m = 3; m <= 20; m++) $('#liveMin').add(new Option(m + ' minutes', m)); $('#liveMin').value = store.get('liveMin', 8); $('#liveMin').onchange = () => store.set('liveMin', +$('#liveMin').value);
+  let liveR = null;
+  $('#liveGo').onclick = () => { if (!last) return; $('#liveGo').disabled = true; $('#status').textContent = 'Playing it live…';
+    setTimeout(() => { try { liveR = O.live(last, +$('#liveMin').value, (Math.random() * 1e9) >>> 0); $('#liveOut').hidden = false; $('#liveName').textContent = liveR.name;
+      $('#liveMeta').textContent = Math.floor(liveR.seconds / 60) + ':' + String(liveR.seconds % 60).padStart(2, '0') + ' · ' + liveR.bars + ' bars · ' + liveR.moves.length + ' moves'; $('#status').textContent = ''; }
+      catch (e) { console.error(e); $('#status').textContent = 'Something went wrong: ' + e.message; } $('#liveGo').disabled = false; }, 30); };
+  $('#liveDl').onclick = () => { if (!liveR) return; const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([liveR.file], { type: 'audio/midi' })); a.download = liveR.fileName; document.body.appendChild(a); a.click(); a.remove(); };
   $('#dl').onclick = () => { if (!last) return; const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([last.file], { type: 'audio/midi' })); a.download = last.fileName; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000); };
 })();
 </script>

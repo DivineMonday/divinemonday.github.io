@@ -50,6 +50,12 @@ ol{margin:10px 0 0;padding-left:22px;color:var(--mu)}ol li{margin:3px 0}
 footer{color:var(--mu);font-size:13px;margin-top:34px;text-align:center}
 footer a{color:var(--mu)}
 @media (max-width:600px){h1{font-size:44px}.go{width:100%}}
+.live{margin-top:18px;padding-top:14px;border-top:1px solid var(--line, rgba(127,127,127,.25))}
+.liveHead{font-weight:700;letter-spacing:.04em;text-transform:uppercase;font-size:13px;margin-bottom:4px}
+.liveHint{font-size:13px;opacity:.75;margin-bottom:8px}
+.liveName{font-weight:700;margin-top:10px}
+.liveGo{flex:0 0 auto;width:auto;padding-left:22px;padding-right:22px;margin:0 0 0 10px}
+.live .row select#liveMin{flex:0 0 auto;width:auto;min-width:0}
 </style>
 </head>
 <body>
@@ -72,6 +78,12 @@ footer a{color:var(--mu)}
   <div class="chips" id="oChips"></div>
   <canvas id="strip" width="1800" height="380"></canvas>
   <div class="row" style="justify-content:flex-start"><button class="dl" id="dl" type="button">↓ MIDI</button><button class="again" id="again" type="button">Another one</button></div>
+  <div class="live">
+    <div class="liveHead">Live</div>
+    <div class="liveHint">The machine plays this track like an artist on stage: it teases, pulls things forward, digs in, storms and comes home.</div>
+    <div class="row" style="justify-content:flex-start"><select id="liveMin" aria-label="Minutes"></select><button class="go liveGo" id="liveGo" type="button">Play it live</button></div>
+    <div class="liveOut" id="liveOut" hidden><div class="liveName" id="liveName"></div><div class="meta" id="liveMeta"></div><button class="dl" id="liveDl" type="button">↓ MIDI</button></div>
+  </div>
   <ol>
     <li>Drag the MIDI into Studio One; Beat, Bass, Chords, Pad, Melody, Answer and Choir each land on their own track, always in that order.</li>
     <li>Put your drums on Beat, your instruments on the others, and Olympus Micro on the Choir track.</li>
@@ -4387,10 +4399,11 @@ if (typeof module !== 'undefined') module.exports = E;
   // the keyboard of the plugin: men below, both in the middle, women above (Olympus Micro: C1 to D#2, E2 to G#3, A3 to C5)
   const ZONES = { menLo: 36, menHi: 51, womenLo: 69, womenHi: 84 };
 
-  const ADJ = ['Silver', 'Hollow', 'Rising', 'Quiet', 'Golden', 'Distant', 'Burning', 'Gentle', 'Eternal', 'Silent', 'Northern', 'Velvet', 'Ancient', 'Crystal', 'Hidden', 'Open', 'Slow', 'Bright', 'Faraway', 'Winter'];
-  const NOUN = ['Cathedral', 'Lantern', 'Psalm', 'Harbour', 'Vigil', 'Horizon', 'Canticle', 'Garden', 'Tide', 'Ember', 'Valley', 'Hymn', 'Starlight', 'Procession', 'Chapel', 'River', 'Meadow', 'Bell', 'Window', 'Shore'];
-  const TAIL = ['', '', '', ' at Dawn', ' in Winter', ' of Light', ' Returning', ' Unbound', ' for Many', ' at Rest'];
-  const makeName = (seed) => { const R = mk(rng(seed ^ 0x5bd1e995)); return R.pick(ADJ) + ' ' + R.pick(NOUN) + R.pick(TAIL); };
+  // names from the five word wheels of the Divine Monday name oracle (the same wheels as the Studios and the lyric oracle)
+  const NW = {"W1":["Silent","Velvet","Cosmic","Hollow","Distant","Quiet","Secret","Hidden","Gentle","Tender","Dusty","Misty","Foggy","Hazy","Smoky","Dreamy","Sleepy","Lonely","Ancient","Faded","Fragile","Frozen","Silky","Satin","Woolen","Feathered","Mossy","Sandy","Salty","Sunken","Drowned","Buried","Forgotten","Haunted","Sacred","Holy","Divine","Pagan","Mystic","Mythic","Lunar","Solar","Stellar","Astral","Celestial","Orbital","Nocturnal","Twilight","Moonlit","Starlit","Candlelit","Lamplit","Shadowed","Veiled","Masked","Muted","Whispered","Soft","Warm","Cold","Cool","Icy","Frosty","Humid","Tropical","Arctic","Polar","Desert","Coastal","Oceanic","Tidal","Rainy","Stormy","Windy","Cloudy","Sunny","Shady","Dim","Pale","Hazed","Ghostly","Spectral","Phantom","Elusive","Endless","Infinite","Eternal","Timeless","Ageless","Vintage","Antique","Rustic","Wooden","Paper","Canvas","Leather","Linen","Cotton","Porcelain","Marble","Granite","Stone","Concrete","Rusted","Tarnished","Weathered","Worn","Broken","Cracked","Shattered","Scattered","Tangled","Woven","Knotted","Folded","Crumpled","Polished","Lacquered","Gilded","Plated","Enameled","Frosted","Clouded","Blurred","Grainy","Noisy","Static","Analog","Vinyl","Tape","Hollowed","Echoing","Resonant","Sonic","Tonal","Modal","Harmonic","Melodic","Lyrical","Poetic","Romantic","Wistful","Nostalgic","Melancholy","Somber","Solemn","Serene","Tranquil","Placid","Calm","Still","Peaceful","Mellow","Lazy","Idle","Hypnotic","Floating","Weightless","Airy","Ethereal","Bodiless","Formless","Shapeless","Nameless","Faceless","Wordless","Soundless","Restless","Sleepless","Homeless","Careless","Fearless","Reckless","Lawless","Boundless","Bottomless","Starless","Sunless","Moonless","Tideless","Windless","Painless","Gracious","Graceful","Elegant","Noble","Royal","Regal","Imperial","Majestic","Grand","Humble","Modest","Simple","Pure","Clean","Clear","Bright","Luminous","Radiant","Glowing","Shining","Gleaming","Glimmering","Shimmering","Sparkling","Twinkling","Flickering","Fading","Waning","Waxing","Rising","Setting","Falling","Drifting","Wandering","Lost","Found","Chosen","Blessed","Cursed","Wicked","Gothic","Baroque","Rococo","Victorian","Futurist","Retro","Modern","Atomic","Quantum","Digital","Virtual","Synthetic","Plastic","Chrome","Mirrored","Liquid","Molten","Smoldering","Ashen","Charred","Gossamer","Lucid","Sunlit","Ornate","Velveteen","Opaline","Wintry","Dreamlike"],"W2":["Kinetic","Fluid","Linear","Rapid","Swift","Quick","Fast","Slow","Steady","Stable","Shaky","Wobbly","Jittery","Nervous","Frantic","Manic","Hyper","Electric","Magnetic","Dynamic","Pulsing","Throbbing","Thumping","Pounding","Rolling","Spinning","Turning","Twisting","Swirling","Whirling","Looping","Cycling","Rotating","Orbiting","Bouncing","Jumping","Leaping","Skipping","Hopping","Dancing","Swinging","Swaying","Rocking","Shaking","Rattling","Stomping","Marching","Running","Racing","Rushing","Chasing","Hunting","Climbing","Soaring","Flying","Gliding","Sliding","Slipping","Rippling","Flowing","Streaming","Pouring","Flooding","Surging","Crashing","Breaking","Bursting","Exploding","Erupting","Igniting","Burning","Blazing","Flaming","Firing","Charging","Driving","Pushing","Pulling","Lifting","Dropping","Sinking","Diving","Plunging","Tumbling","Spiraling","Ascending","Descending","Accelerating","Bending","Stretching","Expanding","Shrinking","Unfolding","Opening","Closing","Breathing","Beating","Ticking","Clicking","Snapping","Popping","Cracking","Buzzing","Humming","Droning","Ringing","Chiming","Clanging","Booming","Roaring","Howling","Screaming","Shouting","Calling","Singing","Chanting","Grooving","Funky","Jazzy","Bluesy","Soulful","Punchy","Snappy","Crisp","Tight","Loose","Sloppy","Lean","Heavy","Light","Dense","Sparse","Thick","Thin","Wide","Narrow","Deep","Shallow","High","Low","Loud","Raw","Rough","Smooth","Sharp","Blunt","Hard","Tough","Solid","Brittle","Elastic","Rubber","Bouncy","Agile","Nimble","Lithe","Fleet","Brisk","Lively","Vivid","Vibrant","Wild","Feral","Savage","Fierce","Bold","Brave","Daring","Furious","Angry","Hungry","Thirsty","Greedy","Eager","Hasty","Urgent","Pressing","Relentless","Tireless","Unstoppable","Overdriven","Distorted","Saturated","Compressed","Amplified","Boosted","Pumped","Juiced","Wired","Charged","Loaded","Primed","Locked","Synced","Phased","Shifted","Displaced","Detuned","Pitched","Bent","Warped","Skewed","Tilted","Angled","Crooked","Zigzag","Jagged","Staggered","Stuttered","Stammered","Glitched","Fractured","Splintered","Shredded","Chopped","Sliced","Diced","Cut","Spliced","Mixed","Blended","Fused","Merged","Bonded","Linked","Chained","Coupled","Paired","Doubled","Tripled","Layered","Stacked","Piled","Packed","Crowded","Swarming","Teeming","Bustling","Hustling","Busy","Awake","Alert","Alive","Living","Pulsating","Radiating","Vibrating","Oscillating","Resonating","Modulating","Alternating","Repeating","Recurring","Returning","Reversing","Inverted","Flipped","Rotated","Translated","Scaled","Stretched","Quantized","Shuffled","Syncopated","Offbeat","Upbeat","Downbeat","Backbeat","Polyrhythmic","Strutting","Swaggering","Prowling","Stalking","Creeping","Crawling","Lurking","Sneaking","Rambling","Roaming","Roving","Travelling","Journeying","Voyaging","Sailing","Cruising","Coasting","Freewheeling","Barreling","Hurtling","Careening","Rocketing","Launching","Blasting","Thundering","Rumbling","Grinding","Churning","Pumping","Hammering","Drilling"],"W3":["Crimson","Scarlet","Ruby","Cherry","Rose","Coral","Salmon","Peach","Apricot","Amber","Honey","Golden","Gold","Saffron","Mustard","Lemon","Lime","Olive","Moss","Jade","Emerald","Mint","Sage","Forest","Pine","Teal","Cyan","Aqua","Turquoise","Azure","Cobalt","Sapphire","Navy","Indigo","Ultramarine","Violet","Purple","Lilac","Lavender","Mauve","Plum","Orchid","Magenta","Fuchsia","Pink","Blush","Ivory","Cream","Pearl","Silver","Platinum","Steel","Iron","Copper","Bronze","Brass","Rust","Ochre","Umber","Sienna","Sepia","Tan","Beige","Khaki","Taupe","Ash","Smoke","Charcoal","Graphite","Onyx","Obsidian","Ebony","Jet","Ink","Black","White","Grey","Gray","Snow","Chalk","Bone","Milk","Neon","Ultraviolet","Infrared","Fluorescent","Pastel","Matte","Glossy","Metallic","Iridescent","Opal","Prism","Spectrum","Rainbow","Holographic","Sunset","Sunrise","Dusk","Dawn","Midnight","Noon","Evening","Morning","Autumn","Winter","Summer","Spring","Harvest","Ember","Flame","Fire","Ice","Frost","Storm","Thunder","Lightning","Rain","Cloud","Mist","Fog","Haze","Shadow","Dark","Hot","Burnt","Smoked","Toasted","Roasted","Baked","Sunburnt","Rosewood","Mahogany","Walnut","Cedar","Oak","Birch","Bamboo","Coffee","Cocoa","Chocolate","Caramel","Vanilla","Cinnamon","Ginger","Pepper","Paprika","Tangerine","Orange","Citrus","Grape","Berry","Wine","Burgundy","Claret","Maroon","Garnet","Topaz","Citrine","Quartz","Diamond","Crystal","Glass","Amethyst","Tourmaline","Malachite","Lapis","Celadon","Vermilion","Carmine","Cadmium","Cinnabar","Woad","Henna","Kohl","Tar","Oil","Petrol","Velour","Suede","Denim","Tweed","Silk","Lace","Gauze","Acid","Toxic","Radioactive","Nuclear","Plasma","Laser","Tropic","Jungle","Savanna","Tundra","Ocean","Sea","River","Lake","Harbor","Island","Coastline","Canyon","Valley","Mountain","Alpine","Glacier","Volcanic","Lava","Magma","Sulfur","Mercury","Nickel","Zinc","Tin","Lead","Titanium","Uranium","Moonstone","Sunstone","Bloodstone","Firestone","Starstone","Skyline","Highland","Lowland","Northern","Southern","Eastern","Western","Inner","Outer","Upper","Lower","First","Last","Second","Third","Final","Early","Late","Lucky","Dear","Sweet","Bitter","Sour","Spicy","Free","Lone","Twin","Double","Single","Half","Full","Empty","Open","Closed"],"W4":["Echo","Grid","Mirror","Window","Door","Gate","Bridge","Tower","Wall","Arch","Dome","Pillar","Column","Stair","Ladder","Corridor","Hallway","Tunnel","Cave","Chamber","Vault","Cellar","Attic","Balcony","Terrace","Garden","Courtyard","Plaza","Square","Circle","Spiral","Helix","Cube","Sphere","Cone","Pyramid","Lens","Frame","Panel","Tile","Brick","Block","Beam","Wire","Cable","Chain","Rope","Thread","Ribbon","Strip","Band","Ring","Loop","Knot","Web","Net","Mesh","Lattice","Matrix","Array","Pattern","Mosaic","Collage","Fresco","Portrait","Sketch","Outline","Silhouette","Contour","Profile","Shape","Figure","Form","Body","Shell","Husk","Seed","Root","Branch","Leaf","Petal","Stem","Thorn","Vine","Tree","Field","Meadow","Hill","Peak","Ridge","Cliff","Shore","Beach","Dune","Reef","Wave","Tide","Current","Stream","Creek","Brook","Pond","Lagoon","Bay","Gulf","Strait","Channel","Canal","Harbour","Pier","Dock","Lighthouse","Beacon","Lantern","Candle","Torch","Flare","Spark","Star","Comet","Meteor","Planet","Moon","Sun","Galaxy","Nebula","Orbit","Satellite","Rocket","Station","Engine","Motor","Turbine","Piston","Gear","Wheel","Lever","Pulley","Hinge","Valve","Pipe","Tube","Hose","Pump","Tank","Barrel","Drum","Bell","Gong","Cymbal","Horn","Flute","Harp","Lyre","Organ","Piano","Violin","Cello","Guitar","Banjo","Bass","Synth","Sampler","Sequencer","Oscillator","Filter","Mixer","Speaker","Amplifier","Radio","Antenna","Receiver","Transmitter","Dial","Switch","Button","Knob","Fader","Slider","Meter","Gauge","Clock","Watch","Compass","Map","Atlas","Globe","Chart","Diagram","Blueprint","Model","Sculpture","Statue","Monument","Temple","Shrine","Altar","Chapel","Cathedral","Palace","Castle","Fortress","Citadel","Market","Bazaar","Arcade","Gallery","Museum","Library","Archive","Theater","Cinema","Studio","Stage","Arena","Stadium","Circus","Carnival","Parade","Motel","Hotel","Diner","Cafe","Bar","Club","Lounge","Ballroom","Disco","Garage","Warehouse","Factory","Foundry","Workshop","Mill","Farm","Ranch","Prairie","Oasis","Mirage","Horizon","Highway","Avenue","Boulevard","Street","Alley","Lane","Road","Path","Trail","Track","Rail","Railway","Platform","Terminal","Airport","Runway","Hangar","Cockpit","Cabin","Capsule","Pod","Module","Unit","Cell","Atom","Molecule","Fossil","Relic","Totem","Mask","Crown","Throne","Sword","Shield","Arrow","Anchor","Sail","Mast","Hull","Raft","Canoe","Ship","Boat","Ferry","Submarine","Train","Tram","Bus","Taxi","Bicycle","Skateboard","Kite","Balloon","Feather","Wing","Claw","Fang","Tail","Eye","Hand","Heart","Vein"],"W5":["Drift","Phase","Flux","Pulse","Signal","Frequency","Wavelength","Amplitude","Resonance","Harmony","Melody","Rhythm","Tempo","Groove","Swing","Shuffle","Cadence","Chord","Scale","Mode","Key","Tone","Timbre","Noise","Silence","Feedback","Delay","Reverb","Chorus","Flanger","Tremolo","Vibrato","Sustain","Decay","Release","Attack","Envelope","Gain","Drive","Fuzz","Overtone","Undertone","Fundamental","Interval","Octave","Unison","Dissonance","Tension","Balance","Symmetry","Gravity","Momentum","Inertia","Velocity","Motion","Friction","Pressure","Density","Entropy","Energy","Power","Force","Charge","Voltage","Circuit","Logic","Code","Algorithm","Protocol","Sequence","Series","Cycle","Iteration","Recursion","Fractal","Chaos","Order","System","Network","Structure","Process","Function","Variable","Constant","Equation","Formula","Theorem","Paradox","Theory","Hypothesis","Dimension","Plane","Vector","Axis","Angle","Curve","Arc","Line","Point","Vertex","Node","Edge","Border","Boundary","Limit","Threshold","Margin","Distance","Depth","Height","Width","Length","Volume","Mass","Weight","Measure","Ratio","Proportion","Fraction","Digit","Number","Zero","Infinity","Origin","Genesis","Exodus","Omen","Oracle","Prophecy","Destiny","Fate","Fortune","Chance","Luck","Hazard","Risk","Promise","Oath","Vow","Pact","Treaty","Accord","Truce","Rebellion","Revolution","Evolution","Mutation","Transition","Transformation","Metamorphosis","Rebirth","Renaissance","Revival","Awakening","Dream","Vision","Illusion","Memory","Reverie","Nostalgia","Longing","Desire","Passion","Devotion","Rapture","Bliss","Euphoria","Trance","Hypnosis","Meditation","Prayer","Ritual","Ceremony","Mystery","Riddle","Enigma","Cipher","Glyph","Rune","Symbol","Sign","Token","Whisper","Rumor","Story","Legend","Myth","Fable","Saga","Chronicle","Anthem","Hymn","Ballad","Lullaby","Serenade","Requiem","Elegy","Ode","Sonnet","Verse","Refrain","Motif","Theme","Variation","Fugue","Canon","Prelude","Interlude","Overture","Finale","Encore","Coda","Epilogue","Prologue","Chapter","Episode","Moment","Instant","Season","Era","Epoch","Age","Century","Decade","Hour","Minute","Daybreak","Nightfall","Eclipse","Solstice","Equinox","Zenith","Apex","Summit","Abyss","Void","Vacuum","Ether","Aura","Halo","Spirit","Soul","Ghost","Shade","Specter","Presence","Absence","Departure","Arrival","Return","Escape","Exile","Journey","Voyage","Odyssey","Quest","Mission","Expedition","Pilgrimage","Passage","Crossing","Migration","Flight","Fall","Rise","Ascent","Descent","Collapse","Surrender","Victory","Glory","Honor","Grace","Mercy","Freedom","Liberty","Justice","Wisdom","Truth","Faith","Hope","Love","Joy","Fear","Rage","Grief","Sorrow","Comfort","Shelter","Refuge","Haven","Sanctuary","Paradise","Utopia","Nowhere","Elsewhere","Somewhere","Anywhere"],"PREP":["Through","Under","Beyond","Into","On","Across","Inside","Above","Below","Behind","Over","Beneath","Within","After","Before","Past","Toward","Around","Along","Against","Among","Beside","Upon","Amid"]};
+  const makeName = (seed) => { const R = mk(rng(seed ^ 0x5bd1e995)), A = NW.W1.concat(NW.W2), M = NW.W3, N = NW.W4.concat(NW.W5), q = R.f();
+    let n = q < 0.4 ? R.pick(A) + ' ' + R.pick(N) : q < 0.55 ? R.pick(M) + ' ' + R.pick(N) : R.pick(A) + ' ' + R.pick(M) + ' ' + R.pick(N);
+    const t = R.f(); if (t < 0.16) n = R.pick(NW.PREP) + ' the ' + n; else if (t < 0.3) n = (R.f() < 0.5 ? 'The' : /^[AEIOU]/.test(n) ? 'An' : 'A') + ' ' + n; return n; };
 
   // ---------- harmony ----------
   function Key(tonic, mode) {
@@ -5513,9 +5526,98 @@ if (typeof module !== 'undefined') module.exports = E;
     return { name, file, p, sigs, recipe, song: sg, choir: s.choir, A: s.A, judge: j, parts, seconds: Math.round(s.choir.seconds), title: G.name + ' · ' + key + ' · ' + Math.round(sg.bpm) + ' bpm',
       choices: [G.name, C.STYLES[p.style].name + ' choir, ' + who], fileName: ('DM_Anthem_' + name + '_' + G.name + '_' + NOTE[sg.key.root] + '_' + sg.key.scale + '_' + Math.round(sg.bpm) + 'bpm').replace(/[^\w]+/g, '_') + '.mid' };
   }
+  // ---------- Live: the artist plays the hit and breaks it open ----------
+  // a player, not a plan: phrase after phrase it listens to what just sounded and makes a move (tease, bring forward,
+  // dig in, pull away, turn around, storm, come home, flow on); the strong elements stay recognisable, they show more of themselves
+  const LIVE_EN = { intro: 0.2, verse: 0.5, prechorus: 0.65, build: 0.7, chorus: 1, drop: 1, break: 0.3, bridge: 0.45, outro: 0.25 };
+  const LIVE_ELS = ['beat', 'bass', 'chords', 'melody', 'answer', 'choir', 'pad'];
+  const LIVE_HOOKS = ['melody', 'choir', 'answer', 'chords', 'bass'];
+  const LIVE_WORD = { beat: 'the beat', bass: 'the bass', chords: 'the chords', melody: 'the melody', answer: 'the answer', choir: 'the choir', pad: 'the pad' };
+  function live(r, minutes, seed) {
+    seed = ((seed || Date.now()) ^ Math.imul(r.p.seed || 1, 2654435761)) >>> 0; const s = r.song, BT = D.barTicks(s), beat = r.beat || 'gm', R = rng(seed), pick = (a) => a[Math.floor(R() * a.length)];
+    const tracks = react(band(s, beat, r.p), r.choir, BT, s), src = {}; for (const tr of tracks) src[tr.part] = tr.notes; src.choir = r.choir.notes;
+    const chan = {}; tracks.forEach((tr) => { chan[tr.part] = tr.channel; });
+    const byBar = {}; for (const el of LIVE_ELS) { const m = new Map(); for (const n of src[el] || []) { const b = Math.floor((n.t + 30) / BT); (m.get(b) || m.set(b, []).get(b)).push(n); } byBar[el] = m; }
+    const ccBar = new Map(); for (const c of r.choir.cc || []) { const b = Math.floor(c.t / BT); (ccBar.get(b) || ccBar.set(b, []).get(b)).push(c); }
+    const secs = []; let b0 = 0; for (const x of s.sections) { secs.push({ type: x.type, from: b0, to: b0 + x.bars }); b0 += x.bars; }
+    const chunks = []; for (const x of secs) { const len = x.to - x.from, st = len >= 8 ? 8 : len; for (let b = x.from; b < x.to; b += st) chunks.push({ type: x.type, from: b, len: Math.min(st, x.to - b), en: LIVE_EN[x.type] ?? 0.5 }); }
+    const has = (el, c) => { for (let i = 0; i < c.len; i++) if ((byBar[el].get(c.from + i) || []).length) return true; return false; };
+    const home = chunks.filter((c) => c.en >= 1 && has('melody', c)).concat(chunks.filter((c) => c.en >= 1)), homeC = home[0] || chunks[0];
+    // the beat's voices: kick lowest busy note, snare the busiest note on the backbeat
+    const bn = src.beat || [], cnt = {}; for (const n of bn) cnt[n.p] = (cnt[n.p] || 0) + 1; const lows = Object.keys(cnt).map(Number).sort((a, b) => a - b);
+    const kick = lows.find((p) => cnt[p] >= bn.length * 0.08) ?? lows[0], back = (p) => bn.filter((n) => n.p === p && [BT / 4, 3 * BT / 4].some((o) => Math.abs((n.t % BT) - o) < 40)).length;
+    const snare = Object.keys(cnt).map(Number).filter((p) => p !== kick).sort((a, b) => back(b) - back(a))[0];
+    const beatsPerBar = BT / PPQ, total = Math.max(Math.round(minutes * s.bpm / beatsPerBar / 4) * 4, secs.length ? b0 + 8 : 64);
+    const out = {}, cc = {}; for (const el of LIVE_ELS) { out[el] = []; cc[el] = []; } const markers = [], choirCC = [];
+    let lvl = { beat: 1, bass: 0, chords: 0, melody: 0, answer: 0, choir: 0, pad: R() < 0.5 ? 1 : 0 }, xf = {}, chunk = chunks.find((c) => c.type === 'intro') || chunks[0], goal = 0.35, lastMove = '', count = {};
+    const energy = () => LIVE_ELS.reduce((a, el) => a + (lvl[el] || 0) * (el === 'beat' ? 1.4 : 1), 0) / 9.4;
+    const present = () => LIVE_ELS.filter((el) => lvl[el] > 0), absent = () => LIVE_ELS.filter((el) => !lvl[el] && el !== 'beat' && (byBar[el].size));
+    for (let B = 0; B < total; B += 8) {
+      const PL = Math.min(8, total - B), pos = B / total, e = energy();
+      if (pos > 0.86) goal = 0.12; else if (Math.abs(e - goal) < 0.12 || R() < 0.2) goal = 0.3 + R() * 0.7 * (0.6 + pos);
+      const mode = {}; let storm = false, move = 'flow', who = '';
+      if (B === 0) { move = 'open'; mode.melody = 'tease'; who = 'melody'; }
+      else if (pos > 0.86) { move = 'let go'; const p = present().filter((el) => el !== 'beat' && el !== 'pad'); if (p.length) { who = pick(p); lvl[who] = 0; } if (pos > 0.94) { lvl.beat = lvl.beat ? 1 : 0; for (const el of ['chords', 'answer', 'choir']) lvl[el] = 0; } }
+      else {
+        const up = goal > e + 0.08, down = goal < e - 0.08, opts = [];
+        if (up) opts.push('front', 'front', 'tease', 'home', 'storm'); if (down) opts.push('pull', 'pull', 'tease', 'flip'); opts.push('dig', 'flip', 'flow');
+        if ((count.home || 0) === 0 && pos > 0.35) opts.push('home', 'home');
+        do { move = pick(opts); } while (move === lastMove && opts.some((o) => o !== lastMove));
+        if (move === 'tease') { const a = absent().filter((el) => LIVE_HOOKS.includes(el)); if (a.length) { who = pick(a); mode[who] = 'tease'; } else move = 'flip'; }
+        if (move === 'front') { const c = absent().concat(present().filter((el) => lvl[el] === 1 && el !== 'beat')); if (c.length) { who = pick(c); for (const el of LIVE_ELS) if (lvl[el] === 2) lvl[el] = 1; lvl[who] = 2; if (!lvl.beat && R() < 0.7) lvl.beat = 1; } else move = 'home'; }
+        if (move === 'pull') { const p = present().filter((el) => el !== 'beat' || R() < 0.3); if (p.length) { who = pick(p); lvl[who] = 0; delete xf[who]; } }
+        if (move === 'dig') { const f = LIVE_ELS.filter((el) => lvl[el] === 2); who = f.length ? f[0] : pick(present()); xf[who] = pick(who === 'beat' ? ['half', 'sparse'] : who === 'melody' || who === 'answer' ? ['octave', 'shift', 'sparse'] : ['octave', 'sparse']); }
+        if (move === 'flip') { const p = present(); if (p.length) { who = pick(p); xf[who] = xf[who] ? undefined : pick(who === 'beat' ? ['half', 'sparse'] : ['octave', 'sparse']); } }
+        if (move === 'storm') storm = true;
+        if (move === 'home') { chunk = homeC; xf = {}; for (const el of LIVE_ELS) if (byBar[el].size) lvl[el] = 1; lvl.melody = 2; if (byBar.choir.size) lvl.choir = 2; lvl.beat = 1; who = 'everyone'; }
+        if (move === 'flow') { const near = chunks.filter((c) => c !== chunk && Math.abs(c.en - goal) < 0.35); chunk = near.length ? pick(near) : pick(chunks); const a = absent(); if (a.length) { who = pick(a); lvl[who] = 1; } const p = present().filter((el) => el !== 'beat' && el !== who); if (p.length > 3) lvl[pick(p)] = 0; }
+        if (move !== 'home' && move !== 'flow' && R() < 0.35) { const near = chunks.filter((c) => Math.abs(c.en - (goal + e) / 2) < 0.3); if (near.length) chunk = pick(near); }
+      }
+      count[move] = (count[move] || 0) + 1; lastMove = move;
+      if (!present().some((el) => el !== 'beat') && !Object.keys(mode).length && pos < 0.9) { const a = absent(); if (a.length) lvl[pick(a)] = 1; }
+      markers.push({ t: B * BT, text: (move === 'open' ? 'Open: a glimpse of the melody' : move === 'home' ? 'Home: everyone' : move === 'storm' ? 'Storm' : move === 'let go' ? 'Letting go' : move === 'tease' ? 'Tease: ' + LIVE_WORD[who] : move === 'front' ? 'Up front: ' + LIVE_WORD[who] : move === 'pull' ? 'Pulled away: ' + LIVE_WORD[who] : move === 'dig' ? 'Digging into ' + (LIVE_WORD[who] || who) : move === 'flip' ? 'Turned around: ' + (LIVE_WORD[who] || who) : 'Flowing on' + (who ? ' with ' + LIVE_WORD[who] : '')) });
+      for (let i = 0; i < PL; i++) {
+        const tb = B + i, sb = chunk.from + (i % chunk.len), gap = storm && i === PL - 1;
+        for (const el of LIVE_ELS) {
+          const L = lvl[el] || 0, md = mode[el]; if (!L && md !== 'tease') continue; if (md === 'tease' && i % 4 !== 0) continue;
+          let notes = (byBar[el].get(sb) || []).map((n) => Object.assign({}, n, { t: n.t - sb * BT }));
+          if (!notes.length && (el === 'melody' || el === 'choir' || el === 'answer') && L === 2) { const hb = homeC.from + (i % homeC.len); notes = (byBar[el].get(hb) || []).filter(() => chunk.type === homeC.type).map((n) => Object.assign({}, n, { t: n.t - hb * BT })); }
+          const x = xf[el];
+          if (x === 'half' && el === 'beat') { const hb = chunk.from + ((Math.floor(i / 2) + (i % 2) * 0) % chunk.len); notes = (byBar.beat.get(hb) || []).filter((n) => (n.t - hb * BT) < BT / 2 || i % 2).map((n) => Object.assign({}, n, { t: ((n.t - hb * BT) % (BT / 2)) * 2 + (i % 2 ? 0 : 0), d: n.d * 2 })).filter((n) => n.t < BT); }
+          if (x === 'octave') { const hi = Math.max(...notes.map((n) => n.p), 0); const k = hi + 12 <= (el === 'chords' || el === 'pad' ? 84 : 96) ? 12 : -12; notes.forEach((n) => { n.p += k; }); }
+          if (x === 'shift') notes = notes.map((n) => Object.assign(n, { t: n.t + PPQ / 2 })).filter((n) => n.t < BT);
+          if (x === 'sparse') notes = notes.filter((n, j) => (n.t % PPQ) < 30 || j % 2 === 0);
+          if (md === 'tease') notes = notes.filter((n) => n.t < BT / 2).map((n) => Object.assign(n, { v: clampV(n.v * 0.85), d: Math.min(n.d, BT / 2) }));
+          else if (L === 1 && el !== 'beat') { notes.forEach((n) => { n.v = clampV(n.v * 0.74); }); if (el === 'melody' || el === 'answer') notes = notes.filter((n) => (n.t % PPQ) < 30 || n.d >= PPQ); }
+          else if (L === 2) notes.forEach((n) => { n.v = clampV(n.v * 1.06); });
+          if (gap) notes = notes.filter((n) => n.t < BT - PPQ).map((n) => Object.assign(n, { d: Math.min(n.d, BT - PPQ - n.t) }));
+          for (const n of notes) out[el].push(Object.assign(n, { t: tb * BT + n.t }));
+          if (el === 'choir') for (const c of ccBar.get(sb) || []) choirCC.push({ t: tb * BT + (c.t - sb * BT), c: 1, v: c.v });
+        }
+        // the storm: the snare rolls in eighths, then sixteenths, louder and louder, and the last beat is air
+        if (storm && i >= PL - 2 && snare != null) { const sub = i === PL - 1 ? 16 : 8; for (let k = 0; k < sub; k++) { const t = k * BT / sub; if (i === PL - 1 && t >= BT - PPQ) break; out.beat.push({ t: tb * BT + t, d: BT / sub - 10, p: snare, v: clampV(50 + 70 * (k / sub) * (i === PL - 1 ? 1 : 0.6)) }); } }
+        // filters that breathe with the playing: closed for a glimpse, opening when an element arrives, wide open up front
+        for (const el of LIVE_ELS) { if (el === 'choir') continue; const L = lvl[el] || 0, md = mode[el]; const v = md === 'tease' ? 45 : !L ? null : L === 2 ? 120 : 84; if (v == null) continue;
+          const opening = B > 0 && i < 4 && L > 0 && !(cc[el].length && cc[el][cc[el].length - 1].v >= v - 2); cc[el].push({ t: tb * BT, c: 74, v: opening ? Math.round(40 + (v - 40) * (i + 1) / 4) : storm && i >= PL - 2 ? 127 : v }); }
+      }
+    }
+    // no dead air by accident: a bar where nothing sounds gets the beat of the home groove (a storm's breath is shorter than a bar)
+    const busy = new Set(); for (const el of LIVE_ELS) for (const n of out[el]) busy.add(Math.floor(n.t / BT));
+    const gb = [...byBar.beat.keys()].filter((b) => (byBar.beat.get(b) || []).length >= 3).sort((a, b) => a - b), mid = gb.filter((b) => secs.some((x) => b >= x.from && b < x.to && (LIVE_EN[x.type] ?? 0.5) >= 0.5)), pool = mid.length ? mid : gb;
+    if (pool.length) for (let b = 0; b < total; b++) if (!busy.has(b)) { const g = pool[b % pool.length]; for (const n of byBar.beat.get(g)) out.beat.push(Object.assign({}, n, { t: b * BT + (n.t - g * BT), v: clampV(n.v * 0.8) })); }
+    for (const el of LIVE_ELS) out[el].sort((a, b) => a.t - b.t);
+    // the track list of the template: Beat, Bass, Chords, Melody, Answer, Choir, Pad
+    const order = ['beat', 'bass', 'chords', 'melody', 'answer'], T2 = order.map((el) => ({ part: el, name: TRACKS.find((t) => t[0] === el)[1], channel: chan[el], notes: out[el], cc: cc[el] }));
+    T2.push({ part: 'choir', name: 'Choir', channel: 15, notes: out.choir, cc: choirCC });
+    T2.push({ part: 'pad', name: 'Pad', channel: chan.pad, notes: out.pad, cc: cc.pad });
+    const file = noConductor(D.writeMidi(T2, { bpm: s.bpm, meter: s.meter, title: s.name, markers }));
+    let name = C.makeName((seed || 1) ^ 0x2c1b3c6d); for (let k = 1; k < 9; k++) { const w = name.toLowerCase().split(' ').filter((x) => x.length > 3); if (new Set(w).size === w.length) break; name = C.makeName(((seed || 1) ^ 0x2c1b3c6d) + k * 977); }
+    const seconds = Math.round(total * beatsPerBar * 60 / s.bpm), G = D.GENRES[r.p.genre];
+    return { name, file, seconds, bars: total, moves: markers, fileName: ('DM_Anthem_Live_' + name + '_' + G.name + '_' + NOTE[s.key.root] + '_' + s.key.scale + '_' + Math.round(s.bpm) + 'bpm_' + Math.floor(seconds / 60) + 'm' + String(seconds % 60).padStart(2, '0') + 's').replace(/[^\w]+/g, '_') + '.mid' };
+  }
   // what a dropped file says, turned into a genre, and a key and tempo when it has them
   async function hear(file) { const h = await listen(file); if (h.key !== undefined || /\.midi?$/i.test(file.name)) { try { const M = C.parseMidi(await file.arrayBuffer()); h.bpm = 60000000 / M.tempos[0].us; } catch (e) { /* no tempo */ } } return h; }
-  root.Anthem = { plan, compose, hear, fromText, rebeat, BEATS, GENRES, FEEL_GENRES };
+  root.Anthem = { plan, compose, hear, fromText, rebeat, live, BEATS, GENRES, FEEL_GENRES };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
@@ -5550,7 +5652,7 @@ if (typeof module !== 'undefined') module.exports = E;
     } catch (e) { console.error(e); $('#status').textContent = 'Something went wrong: ' + e.message; }
     $('#go').disabled = false; $('#again').disabled = false;
   };
-  const show = (r) => {
+  const show = (r) => { $('#liveOut').hidden = true;
     $('#out').hidden = false; $('#oName').textContent = r.name;
     $('#oMeta').textContent = r.title + ' · ' + Math.floor(r.seconds / 60) + ':' + String(r.seconds % 60).padStart(2, '0');
     $('#oChips').innerHTML = r.choices.map((c) => '<span>' + c + '</span>').join('');
@@ -5567,6 +5669,13 @@ if (typeof module !== 'undefined') module.exports = E;
     const Z = ch.zones; for (const n of ch.notes) { const k = n.voice === 'S' || n.voice === 'A' ? 1 : 2; g.fillStyle = rows[k][1].trim(); g.globalAlpha = 0.35 + 0.65 * n.v / 127; g.fillRect(x0 + n.t / total * w, top + k * rh + 8, Math.max(2, n.d / total * w), rh - 16); } g.globalAlpha = 1;
   };
   $('#go').onclick = run; $('#again').onclick = run;
+  for (let m = 3; m <= 20; m++) $('#liveMin').add(new Option(m + ' minutes', m)); $('#liveMin').value = store.get('liveMin', 8); $('#liveMin').onchange = () => store.set('liveMin', +$('#liveMin').value);
+  let liveR = null;
+  $('#liveGo').onclick = () => { if (!last) return; $('#liveGo').disabled = true; $('#status').textContent = 'Playing it live…';
+    setTimeout(() => { try { liveR = O.live(last, +$('#liveMin').value, (Math.random() * 1e9) >>> 0); $('#liveOut').hidden = false; $('#liveName').textContent = liveR.name;
+      $('#liveMeta').textContent = Math.floor(liveR.seconds / 60) + ':' + String(liveR.seconds % 60).padStart(2, '0') + ' · ' + liveR.bars + ' bars · ' + liveR.moves.length + ' moves'; $('#status').textContent = ''; }
+      catch (e) { console.error(e); $('#status').textContent = 'Something went wrong: ' + e.message; } $('#liveGo').disabled = false; }, 30); };
+  $('#liveDl').onclick = () => { if (!liveR) return; const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([liveR.file], { type: 'audio/midi' })); a.download = liveR.fileName; document.body.appendChild(a); a.click(); a.remove(); };
   $('#dl').onclick = () => { if (!last) return; const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([last.file], { type: 'audio/midi' })); a.download = last.fileName; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000); };
 })();
 </script>
