@@ -50,7 +50,7 @@ ol{margin:10px 0 0;padding-left:22px;color:var(--mu)}ol li{margin:3px 0}
 footer{color:var(--mu);font-size:13px;margin-top:34px;text-align:center}
 footer a{color:var(--mu)}
 @media (max-width:600px){h1{font-size:44px}.go{width:100%}}
-.live{margin-top:18px;padding-top:14px;border-top:1px solid var(--line, rgba(127,127,127,.25))}
+.live{margin-top:18px}
 .liveHead{font-weight:700;letter-spacing:.04em;text-transform:uppercase;font-size:13px;margin-bottom:4px}
 .liveHint{font-size:13px;opacity:.75;margin-bottom:8px}
 .liveName{font-weight:700;margin-top:10px}
@@ -78,18 +78,21 @@ footer a{color:var(--mu)}
   <div class="chips" id="oChips"></div>
   <canvas id="strip" width="1800" height="380"></canvas>
   <div class="row" style="justify-content:flex-start"><button class="dl" id="dl" type="button">↓ MIDI</button><button class="again" id="again" type="button">Another one</button></div>
-  <div class="live">
-    <div class="liveHead">Live</div>
-    <div class="liveHint">The machine plays this track like an artist on stage: it teases, pulls things forward, digs in, storms and comes home.</div>
-    <div class="row" style="justify-content:flex-start"><select id="liveMin" aria-label="Minutes"></select><button class="go liveGo" id="liveGo" type="button">Play it live</button></div>
-    <div class="liveOut" id="liveOut" hidden><div class="liveName" id="liveName"></div><div class="meta" id="liveMeta"></div><button class="dl" id="liveDl" type="button">↓ MIDI</button></div>
-  </div>
   <ol>
     <li>Drag the MIDI into Studio One; Beat, Bass, Chords, Pad, Melody, Answer and Choir each land on their own track, always in that order.</li>
     <li>Put your drums on Beat, your instruments on the others, and Olympus Micro on the Choir track.</li>
     <li>Press KEYS in Olympus and pick the vowels you like.</li>
     <li>Press play.</li>
   </ol>
+</div>
+<div class="card live" id="liveCard">
+  <div class="liveHead">Live</div>
+  <div class="liveHint">The machine plays a track like an artist on stage: it teases, pulls things forward, digs in, storms and comes home. Drop your own MIDI here, or it plays the track above.</div>
+  <button class="drop" id="liveDrop" type="button">Drop a MIDI here, or choose one</button>
+  <input type="file" id="liveFileIn" accept=".mid,.midi,audio/midi" hidden>
+  <div class="heard" id="liveSrc"></div>
+  <div class="row" style="justify-content:flex-start"><select id="liveMin" aria-label="Minutes"></select><button class="go liveGo" id="liveGo" type="button">Play it live</button></div>
+  <div class="liveOut" id="liveOut" hidden><div class="liveName" id="liveName"></div><div class="meta" id="liveMeta"></div><button class="dl" id="liveDl" type="button">↓ MIDI</button></div>
 </div>
 <footer>Divine Monday, Berlin, Germany · <a href="../legal/">Legal</a></footer>
 </div>
@@ -133,7 +136,7 @@ footer a{color:var(--mu)}
     } catch (e) { console.error(e); $('#status').textContent = 'Something went wrong: ' + e.message; }
     $('#go').disabled = false; $('#again').disabled = false;
   };
-  const show = (r) => { $('#liveOut').hidden = true;
+  const show = (r) => { if (!liveSrc) $('#liveOut').hidden = true; liveLabel();
     $('#out').hidden = false; $('#oName').textContent = r.name;
     $('#oMeta').textContent = r.title + ' · ' + Math.floor(r.seconds / 60) + ':' + String(r.seconds % 60).padStart(2, '0');
     $('#oChips').innerHTML = r.choices.map((c) => '<span>' + c + '</span>').join('');
@@ -151,11 +154,18 @@ footer a{color:var(--mu)}
   };
   $('#go').onclick = run; $('#again').onclick = run;
   for (let m = 3; m <= 20; m++) $('#liveMin').add(new Option(m + ' minutes', m)); $('#liveMin').value = store.get('liveMin', 8); $('#liveMin').onchange = () => store.set('liveMin', +$('#liveMin').value);
-  let liveR = null;
-  $('#liveGo').onclick = () => { if (!last) return; $('#liveGo').disabled = true; $('#status').textContent = 'Playing it live…';
-    setTimeout(() => { try { liveR = O.live(last, +$('#liveMin').value, (Math.random() * 1e9) >>> 0); $('#liveOut').hidden = false; $('#liveName').textContent = liveR.name;
-      $('#liveMeta').textContent = Math.floor(liveR.seconds / 60) + ':' + String(liveR.seconds % 60).padStart(2, '0') + ' · ' + liveR.bars + ' bars · ' + liveR.moves.length + ' moves'; $('#status').textContent = ''; }
-      catch (e) { console.error(e); $('#status').textContent = 'Something went wrong: ' + e.message; } $('#liveGo').disabled = false; }, 30); };
+  let liveR = null, liveSrc = null;
+  const liveLabel = () => { $('#liveSrc').innerHTML = liveSrc ? 'Playing your file ' + liveSrc.name.replace(/[<>&]/g, '') + '. <button type="button" id="liveForget">use the track above</button>' : last ? 'Playing the track above.' : 'Make a track above, or drop a MIDI.'; const f = $('#liveForget'); if (f) f.onclick = () => { liveSrc = null; liveLabel(); }; };
+  const liveTake = async (file) => { if (!file) return; if (!/\.midi?$/i.test(file.name)) { $('#liveSrc').textContent = 'Live plays MIDI files.'; return; } liveSrc = { name: file.name, buf: await file.arrayBuffer() }; liveLabel(); };
+  $('#liveDrop').onclick = () => $('#liveFileIn').click(); $('#liveFileIn').onchange = (e) => liveTake(e.target.files[0]);
+  $('#liveCard').addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); $('#liveDrop').classList.add('on'); });
+  $('#liveCard').addEventListener('dragleave', (e) => { if (!e.relatedTarget || !$('#liveCard').contains(e.relatedTarget)) $('#liveDrop').classList.remove('on'); });
+  $('#liveCard').addEventListener('drop', (e) => { e.preventDefault(); e.stopPropagation(); $('#liveDrop').classList.remove('on'); liveTake(e.dataTransfer.files[0]); });
+  liveLabel();
+  $('#liveGo').onclick = () => { if (!liveSrc && !last) { liveLabel(); return; } $('#liveGo').disabled = true; $('#liveSrc').textContent = 'Playing it live…';
+    setTimeout(() => { try { const min = +$('#liveMin').value, sd = (Math.random() * 1e9) >>> 0; liveR = liveSrc ? O.liveFile(liveSrc.buf, liveSrc.name, min, sd) : O.live(last, min, sd); $('#liveOut').hidden = false; $('#liveName').textContent = liveR.name;
+      $('#liveMeta').textContent = Math.floor(liveR.seconds / 60) + ':' + String(liveR.seconds % 60).padStart(2, '0') + ' · ' + liveR.bars + ' bars · ' + liveR.moves.length + ' moves'; liveLabel(); }
+      catch (e) { console.error(e); $('#liveSrc').textContent = 'That did not work: ' + e.message; } $('#liveGo').disabled = false; }, 30); };
   $('#liveDl').onclick = () => { if (!liveR) return; const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([liveR.file], { type: 'audio/midi' })); a.download = liveR.fileName; document.body.appendChild(a); a.click(); a.remove(); };
   $('#dl').onclick = () => { if (!last) return; const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([last.file], { type: 'audio/midi' })); a.download = last.fileName; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000); };
 })();

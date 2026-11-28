@@ -294,92 +294,140 @@
   // a player, not a plan: phrase after phrase it listens to what just sounded and makes a move (tease, bring forward,
   // dig in, pull away, turn around, storm, come home, flow on); the strong elements stay recognisable, they show more of themselves
   const LIVE_EN = { intro: 0.2, verse: 0.5, prechorus: 0.65, build: 0.7, chorus: 1, drop: 1, break: 0.3, bridge: 0.45, outro: 0.25 };
-  const LIVE_ELS = ['beat', 'bass', 'chords', 'melody', 'answer', 'choir', 'pad'];
-  const LIVE_HOOKS = ['melody', 'choir', 'answer', 'chords', 'bass'];
-  const LIVE_WORD = { beat: 'the beat', bass: 'the bass', chords: 'the chords', melody: 'the melody', answer: 'the answer', choir: 'the choir', pad: 'the pad' };
-  function live(r, minutes, seed) {
-    seed = ((seed || Date.now()) ^ Math.imul(r.p.seed || 1, 2654435761)) >>> 0; const s = r.song, BT = D.barTicks(s), beat = r.beat || 'gm', R = rng(seed), pick = (a) => a[Math.floor(R() * a.length)];
-    const tracks = react(band(s, beat, r.p), r.choir, BT, s), src = {}; for (const tr of tracks) src[tr.part] = tr.notes; src.choir = r.choir.notes;
-    const chan = {}; tracks.forEach((tr) => { chan[tr.part] = tr.channel; });
-    const byBar = {}; for (const el of LIVE_ELS) { const m = new Map(); for (const n of src[el] || []) { const b = Math.floor((n.t + 30) / BT); (m.get(b) || m.set(b, []).get(b)).push(n); } byBar[el] = m; }
-    const ccBar = new Map(); for (const c of r.choir.cc || []) { const b = Math.floor(c.t / BT); (ccBar.get(b) || ccBar.set(b, []).get(b)).push(c); }
+  const LIVE_SEC = [['intro', /intro/i], ['prechorus', /pre/i], ['chorus', /chorus|refrain|hook/i], ['drop', /drop/i], ['build', /build|rise/i], ['break', /break/i], ['bridge', /bridge/i], ['outro', /outro|end/i], ['verse', /verse|couplet/i]];
+  const LIVE_KEYS = [['beat', /beat|drum|kit|xo\b|perc/i], ['bass', /bass/i], ['chords', /chord|keys|stab/i], ['melody', /melod|lead/i], ['answer', /answer/i], ['choir', /choir|vox|voc/i], ['pad', /pad/i]];
+  // the material a live set is played from: the elements (tracks), the parts of the song, tempo and metre
+  function liveFromResult(r) {
+    const s = r.song, BT = D.barTicks(s), tracks = react(band(s, r.beat || 'gm', r.p), r.choir, BT, s), pad = tracks.find((t) => t.part === 'pad');
+    const els = tracks.filter((t) => t.part !== 'pad').map((tr) => ({ key: tr.part, name: tr.name, channel: tr.channel, notes: tr.notes, cc: [] }));
+    els.push({ key: 'choir', name: 'Choir', channel: 15, notes: r.choir.notes, cc: (r.choir.cc || []).map((c) => ({ t: c.t, c: 1, v: c.v })) });
+    els.push({ key: 'pad', name: 'Pad', channel: pad.channel, notes: pad.notes, cc: [] });
     const secs = []; let b0 = 0; for (const x of s.sections) { secs.push({ type: x.type, from: b0, to: b0 + x.bars }); b0 += x.bars; }
-    const chunks = []; for (const x of secs) { const len = x.to - x.from, st = len >= 8 ? 8 : len; for (let b = x.from; b < x.to; b += st) chunks.push({ type: x.type, from: b, len: Math.min(st, x.to - b), en: LIVE_EN[x.type] ?? 0.5 }); }
-    const has = (el, c) => { for (let i = 0; i < c.len; i++) if ((byBar[el].get(c.from + i) || []).length) return true; return false; };
-    const home = chunks.filter((c) => c.en >= 1 && has('melody', c)).concat(chunks.filter((c) => c.en >= 1)), homeC = home[0] || chunks[0];
+    return { els, secs, BT, bpm: s.bpm, meter: s.meter, title: s.name, tag: D.GENRES[r.p.genre].name + '_' + NOTE[s.key.root] + '_' + s.key.scale + '_' + Math.round(s.bpm) + 'bpm', seed: r.p.seed };
+  }
+  // any MIDI you bring: tracks become elements by their names, markers become the parts of the song
+  function liveFromMidi(buf, fileName) {
+    const b = new Uint8Array(buf); if (String.fromCharCode(b[0], b[1], b[2], b[3]) !== 'MThd') throw new Error('this is not a MIDI file');
+    const ppq = (b[12] << 8) | b[13], k = PPQ / ppq, markers = [], trs = []; let p = 14, tempo = null, num = 4, den = 4;
+    while (p + 8 <= b.length) {
+      const id = String.fromCharCode(b[p], b[p + 1], b[p + 2], b[p + 3]), len = ((b[p + 4] << 24) | (b[p + 5] << 16) | (b[p + 6] << 8) | b[p + 7]) >>> 0; let q = p + 8; const e = Math.min(b.length, q + len); p = q + len; if (id !== 'MTrk') continue;
+      let t = 0, rs = 0, name = ''; const on = {}, notes = [], cc = [], chs = {};
+      const vl = () => { let v = 0, c; do { c = b[q++]; v = (v << 7) | (c & 127); } while (c & 128 && q < e); return v; };
+      while (q < e) { t += vl(); let st = b[q]; if (st & 128) { q++; if (st < 0xf0) rs = st; } else st = rs;
+        if (st === 0xff) { const ty = b[q++], l = vl(), data = b.slice(q, q + l); q += l; const txt = new TextDecoder().decode(data);
+          if (ty === 3 && !name) name = txt; else if ((ty === 6 || ty === 1) && !/^Choir:|Copyright/i.test(txt)) markers.push({ t: Math.round(t * k), text: txt });
+          else if (ty === 0x51 && tempo == null) tempo = 60000000 / ((data[0] << 16) | (data[1] << 8) | data[2]); else if (ty === 0x58) { num = data[0]; den = 1 << data[1]; } }
+        else if (st === 0xf0 || st === 0xf7) q += vl();
+        else { const hi = st & 0xf0, ch = st & 15, a = b[q++], c = (hi === 0xc0 || hi === 0xd0) ? 0 : b[q++];
+          if (hi === 0x90 && c > 0) { (on[ch * 128 + a] = on[ch * 128 + a] || []).push({ t, v: c }); chs[ch] = (chs[ch] || 0) + 1; }
+          else if (hi === 0x80 || (hi === 0x90 && c === 0)) { const s0 = (on[ch * 128 + a] || []).shift(); if (s0) notes.push({ t: Math.round(s0.t * k), d: Math.max(1, Math.round((t - s0.t) * k)), p: a, v: s0.v }); }
+          else if (hi === 0xb0 && a !== 74) cc.push({ t: Math.round(t * k), c: a, v: c }); } }
+      const top = Object.keys(chs).sort((x, y) => chs[y] - chs[x])[0];
+      trs.push({ name, notes, cc, channel: top == null ? 0 : +top });
+    }
+    const used = {}, els = [];
+    trs.forEach((tr, i) => { if (!tr.notes.length && !LIVE_KEYS.some(([, re]) => re.test(tr.name))) return;
+      let key = (LIVE_KEYS.find(([, re]) => re.test(tr.name)) || [])[0] || (tr.channel === 9 ? 'beat' : 'x' + i); if (used[key]) key = key + i; used[key] = 1;
+      els.push({ key, name: tr.name || 'Track ' + (i + 1), channel: tr.channel, notes: tr.notes.sort((a, c) => a.t - c.t), cc: tr.cc }); });
+    if (!els.some((x) => x.notes.length)) throw new Error('there are no notes in this file');
+    const meter = D.METERS[num + '/' + den] ? num + '/' + den : '4/4', BT = Math.round(PPQ * 4 * num / den), bpm = tempo || 120;
+    let end = 0; for (const x of els) for (const n of x.notes) end = Math.max(end, n.t + n.d); const bars = Math.max(1, Math.ceil(end / BT));
+    const ms = markers.map((m) => ({ b: Math.round(m.t / BT), type: (LIVE_SEC.find(([, re]) => re.test(m.text)) || [])[0] })).filter((m) => m.type).sort((a, c) => a.b - c.b);
+    let secs = [];
+    if (ms.length >= 2) ms.forEach((m, j) => { const to = j + 1 < ms.length ? ms[j + 1].b : bars; if (to > m.b) secs.push({ type: m.type, from: m.b, to }); });
+    else { // no parts named: every eight bars is a part, how full it is says how much energy it has
+      const dens = []; for (let s0 = 0; s0 < bars; s0 += 8) { let c = 0; for (const x of els) c += x.notes.filter((n) => n.t >= s0 * BT && n.t < (s0 + 8) * BT).length; dens.push(c); }
+      const sorted = dens.slice().sort((a, c) => a - c), hiT = sorted[Math.floor(sorted.length * 0.66)], loT = sorted[Math.floor(sorted.length * 0.33)];
+      dens.forEach((c, j) => secs.push({ type: c >= hiT ? 'chorus' : c <= loT ? (j === 0 ? 'intro' : 'break') : 'verse', from: j * 8, to: Math.min(bars, j * 8 + 8) })); }
+    const base = String(fileName || 'track').replace(/\.midi?$/i, '').replace(/^.*?DM_/, '').replace(/^Anthem_(Live_)?/, '');
+    let h = 2166136261; for (const ch of base) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+    return { els, secs, BT, bpm, meter, title: base.replace(/_/g, ' '), tag: base, seed: h >>> 0 };
+  }
+  // a player, not a plan: phrase after phrase it listens to what just sounded and makes a move (tease, bring forward,
+  // dig in, pull away, turn around, storm, come home, flow on); the strong elements stay recognisable, they show more of themselves
+  function playLive(mat, minutes, seed) {
+    seed = ((seed || Date.now()) ^ Math.imul(mat.seed || 1, 2654435761)) >>> 0; const BT = mat.BT, R = rng(seed), pick = (a) => a[Math.floor(R() * a.length)];
+    const E = {}; for (const x of mat.els) E[x.key] = x; const K = mat.els.map((x) => x.key), word = (k) => (k && E[k] ? 'the ' + E[k].name.toLowerCase() : k || '');
+    const hasBeat = !!E.beat, hooks = K.filter((k) => k !== 'beat' && k !== 'pad'), lead = E.melody ? 'melody' : hooks.find((k) => E[k].notes.length) || K[0];
+    const byBar = {}, ccBar = {}; for (const k of K) { const m = new Map(), c = new Map(); for (const n of E[k].notes) { const b = Math.floor((n.t + 30) / BT); (m.get(b) || m.set(b, []).get(b)).push(n); } for (const x of E[k].cc) { const b = Math.floor(x.t / BT); (c.get(b) || c.set(b, []).get(b)).push(x); } byBar[k] = m; ccBar[k] = c; }
+    const secs = mat.secs.length ? mat.secs : [{ type: 'verse', from: 0, to: 8 }], b0 = secs[secs.length - 1].to;
+    const chunks = []; for (const x of secs) { const len = x.to - x.from, st = len >= 8 ? 8 : len; for (let b = x.from; b < x.to; b += st) chunks.push({ type: x.type, from: b, len: Math.max(1, Math.min(st, x.to - b)), en: LIVE_EN[x.type] ?? 0.5 }); }
+    const has = (k, c) => { for (let i = 0; i < c.len; i++) if ((byBar[k].get(c.from + i) || []).length) return true; return false; };
+    const home = chunks.filter((c) => c.en >= 1 && has(lead, c)).concat(chunks.filter((c) => c.en >= 1), chunks.filter((c) => has(lead, c))), homeC = home[0] || chunks[0];
     // the beat's voices: kick lowest busy note, snare the busiest note on the backbeat
-    const bn = src.beat || [], cnt = {}; for (const n of bn) cnt[n.p] = (cnt[n.p] || 0) + 1; const lows = Object.keys(cnt).map(Number).sort((a, b) => a - b);
+    const bn = hasBeat ? E.beat.notes : [], cnt = {}; for (const n of bn) cnt[n.p] = (cnt[n.p] || 0) + 1; const lows = Object.keys(cnt).map(Number).sort((a, b) => a - b);
     const kick = lows.find((p) => cnt[p] >= bn.length * 0.08) ?? lows[0], back = (p) => bn.filter((n) => n.p === p && [BT / 4, 3 * BT / 4].some((o) => Math.abs((n.t % BT) - o) < 40)).length;
     const snare = Object.keys(cnt).map(Number).filter((p) => p !== kick).sort((a, b) => back(b) - back(a))[0];
-    const beatsPerBar = BT / PPQ, total = Math.max(Math.round(minutes * s.bpm / beatsPerBar / 4) * 4, secs.length ? b0 + 8 : 64);
-    const out = {}, cc = {}; for (const el of LIVE_ELS) { out[el] = []; cc[el] = []; } const markers = [], choirCC = [];
-    let lvl = { beat: 1, bass: 0, chords: 0, melody: 0, answer: 0, choir: 0, pad: R() < 0.5 ? 1 : 0 }, xf = {}, chunk = chunks.find((c) => c.type === 'intro') || chunks[0], goal = 0.35, lastMove = '', count = {};
-    const energy = () => LIVE_ELS.reduce((a, el) => a + (lvl[el] || 0) * (el === 'beat' ? 1.4 : 1), 0) / 9.4;
-    const present = () => LIVE_ELS.filter((el) => lvl[el] > 0), absent = () => LIVE_ELS.filter((el) => !lvl[el] && el !== 'beat' && (byBar[el].size));
+    const beatsPerBar = BT / PPQ, total = Math.max(Math.round(minutes * mat.bpm / beatsPerBar / 4) * 4, b0 + 8);
+    const out = {}, cc = {}, occ = {}; for (const k of K) { out[k] = []; cc[k] = []; occ[k] = []; } const markers = [];
+    const lvl = {}; for (const k of K) lvl[k] = 0; if (hasBeat) lvl.beat = 1; if (E.pad && R() < 0.5) lvl.pad = 1; if (!hasBeat) lvl[pick(K.filter((k) => k !== lead))] = 1;
+    let xf = {}, chunk = chunks.find((c) => c.type === 'intro') || chunks[0], goal = 0.35, lastMove = '';
+    const count = {}, maxE = 1.4 + 1.3 * Math.max(1, K.length - 1);
+    const energy = () => K.reduce((a, k) => a + (lvl[k] || 0) * (k === 'beat' ? 1.4 : 1), 0) / maxE;
+    const present = () => K.filter((k) => lvl[k] > 0), absent = () => K.filter((k) => !lvl[k] && k !== 'beat' && byBar[k].size);
     for (let B = 0; B < total; B += 8) {
       const PL = Math.min(8, total - B), pos = B / total, e = energy();
       if (pos > 0.86) goal = 0.12; else if (Math.abs(e - goal) < 0.12 || R() < 0.2) goal = 0.3 + R() * 0.7 * (0.6 + pos);
       const mode = {}; let storm = false, move = 'flow', who = '';
-      if (B === 0) { move = 'open'; mode.melody = 'tease'; who = 'melody'; }
-      else if (pos > 0.86) { move = 'let go'; const p = present().filter((el) => el !== 'beat' && el !== 'pad'); if (p.length) { who = pick(p); lvl[who] = 0; } if (pos > 0.94) { lvl.beat = lvl.beat ? 1 : 0; for (const el of ['chords', 'answer', 'choir']) lvl[el] = 0; } }
+      if (B === 0) { move = 'open'; mode[lead] = 'tease'; who = lead; }
+      else if (pos > 0.86) { move = 'let go'; const p = present().filter((k) => k !== 'beat' && k !== 'pad'); if (p.length) { who = pick(p); lvl[who] = 0; } if (pos > 0.94) for (const k of hooks) if (k !== 'bass' && k !== lead) lvl[k] = 0; }
       else {
         const up = goal > e + 0.08, down = goal < e - 0.08, opts = [];
-        if (up) opts.push('front', 'front', 'tease', 'home', 'storm'); if (down) opts.push('pull', 'pull', 'tease', 'flip'); opts.push('dig', 'flip', 'flow');
+        if (up) opts.push('front', 'front', 'tease', 'home'); if (up && hasBeat) opts.push('storm'); if (down) opts.push('pull', 'pull', 'tease', 'flip'); opts.push('dig', 'flip', 'flow');
         if ((count.home || 0) === 0 && pos > 0.35) opts.push('home', 'home');
         do { move = pick(opts); } while (move === lastMove && opts.some((o) => o !== lastMove));
-        if (move === 'tease') { const a = absent().filter((el) => LIVE_HOOKS.includes(el)); if (a.length) { who = pick(a); mode[who] = 'tease'; } else move = 'flip'; }
-        if (move === 'front') { const c = absent().concat(present().filter((el) => lvl[el] === 1 && el !== 'beat')); if (c.length) { who = pick(c); for (const el of LIVE_ELS) if (lvl[el] === 2) lvl[el] = 1; lvl[who] = 2; if (!lvl.beat && R() < 0.7) lvl.beat = 1; } else move = 'home'; }
-        if (move === 'pull') { const p = present().filter((el) => el !== 'beat' || R() < 0.3); if (p.length) { who = pick(p); lvl[who] = 0; delete xf[who]; } }
-        if (move === 'dig') { const f = LIVE_ELS.filter((el) => lvl[el] === 2); who = f.length ? f[0] : pick(present()); xf[who] = pick(who === 'beat' ? ['half', 'sparse'] : who === 'melody' || who === 'answer' ? ['octave', 'shift', 'sparse'] : ['octave', 'sparse']); }
+        if (move === 'tease') { const a = absent().filter((k) => hooks.includes(k)); if (a.length) { who = pick(a); mode[who] = 'tease'; } else move = 'flip'; }
+        if (move === 'front') { const c = absent().concat(present().filter((k) => lvl[k] === 1 && k !== 'beat')); if (c.length) { who = pick(c); for (const k of K) if (lvl[k] === 2) lvl[k] = 1; lvl[who] = 2; if (hasBeat && !lvl.beat && R() < 0.7) lvl.beat = 1; } else move = 'home'; }
+        if (move === 'pull') { const p = present().filter((k) => k !== 'beat' || R() < 0.3); if (p.length > 1) { who = pick(p); lvl[who] = 0; delete xf[who]; } else move = 'flip'; }
+        if (move === 'dig') { const f = K.filter((k) => lvl[k] === 2); who = f.length ? f[0] : pick(present()); xf[who] = pick(who === 'beat' ? ['half', 'sparse'] : who === lead || who === 'answer' ? ['octave', 'shift', 'sparse'] : ['octave', 'sparse']); }
         if (move === 'flip') { const p = present(); if (p.length) { who = pick(p); xf[who] = xf[who] ? undefined : pick(who === 'beat' ? ['half', 'sparse'] : ['octave', 'sparse']); } }
         if (move === 'storm') storm = true;
-        if (move === 'home') { chunk = homeC; xf = {}; for (const el of LIVE_ELS) if (byBar[el].size) lvl[el] = 1; lvl.melody = 2; if (byBar.choir.size) lvl.choir = 2; lvl.beat = 1; who = 'everyone'; }
-        if (move === 'flow') { const near = chunks.filter((c) => c !== chunk && Math.abs(c.en - goal) < 0.35); chunk = near.length ? pick(near) : pick(chunks); const a = absent(); if (a.length) { who = pick(a); lvl[who] = 1; } const p = present().filter((el) => el !== 'beat' && el !== who); if (p.length > 3) lvl[pick(p)] = 0; }
+        if (move === 'home') { chunk = homeC; xf = {}; for (const k of K) if (byBar[k].size) lvl[k] = 1; lvl[lead] = 2; if (E.choir && byBar.choir.size) lvl.choir = 2; who = 'everyone'; }
+        if (move === 'flow') { const near = chunks.filter((c) => c !== chunk && Math.abs(c.en - goal) < 0.35); chunk = near.length ? pick(near) : pick(chunks); const a = absent(); if (a.length) { who = pick(a); lvl[who] = 1; } const p = present().filter((k) => k !== 'beat' && k !== who); if (p.length > 3) lvl[pick(p)] = 0; }
         if (move !== 'home' && move !== 'flow' && R() < 0.35) { const near = chunks.filter((c) => Math.abs(c.en - (goal + e) / 2) < 0.3); if (near.length) chunk = pick(near); }
       }
       count[move] = (count[move] || 0) + 1; lastMove = move;
-      if (!present().some((el) => el !== 'beat') && !Object.keys(mode).length && pos < 0.9) { const a = absent(); if (a.length) lvl[pick(a)] = 1; }
-      markers.push({ t: B * BT, text: (move === 'open' ? 'Open: a glimpse of the melody' : move === 'home' ? 'Home: everyone' : move === 'storm' ? 'Storm' : move === 'let go' ? 'Letting go' : move === 'tease' ? 'Tease: ' + LIVE_WORD[who] : move === 'front' ? 'Up front: ' + LIVE_WORD[who] : move === 'pull' ? 'Pulled away: ' + LIVE_WORD[who] : move === 'dig' ? 'Digging into ' + (LIVE_WORD[who] || who) : move === 'flip' ? 'Turned around: ' + (LIVE_WORD[who] || who) : 'Flowing on' + (who ? ' with ' + LIVE_WORD[who] : '')) });
+      if (!present().some((k) => k !== 'beat') && !Object.keys(mode).length && pos < 0.9) { const a = absent(); if (a.length) lvl[pick(a)] = 1; }
+      markers.push({ t: B * BT, text: move === 'open' ? 'Open: a glimpse of ' + word(lead) : move === 'home' ? 'Home: everyone' : move === 'storm' ? 'Storm' : move === 'let go' ? 'Letting go' : move === 'tease' ? 'Tease: ' + word(who) : move === 'front' ? 'Up front: ' + word(who) : move === 'pull' ? 'Pulled away: ' + word(who) : move === 'dig' ? 'Digging into ' + word(who) : move === 'flip' ? 'Turned around: ' + word(who) : 'Flowing on' + (who ? ' with ' + word(who) : '') });
       for (let i = 0; i < PL; i++) {
         const tb = B + i, sb = chunk.from + (i % chunk.len), gap = storm && i === PL - 1;
-        for (const el of LIVE_ELS) {
-          const L = lvl[el] || 0, md = mode[el]; if (!L && md !== 'tease') continue; if (md === 'tease' && i % 4 !== 0) continue;
-          let notes = (byBar[el].get(sb) || []).map((n) => Object.assign({}, n, { t: n.t - sb * BT }));
-          if (!notes.length && (el === 'melody' || el === 'choir' || el === 'answer') && L === 2) { const hb = homeC.from + (i % homeC.len); notes = (byBar[el].get(hb) || []).filter(() => chunk.type === homeC.type).map((n) => Object.assign({}, n, { t: n.t - hb * BT })); }
-          const x = xf[el];
-          if (x === 'half' && el === 'beat') { const hb = chunk.from + ((Math.floor(i / 2) + (i % 2) * 0) % chunk.len); notes = (byBar.beat.get(hb) || []).filter((n) => (n.t - hb * BT) < BT / 2 || i % 2).map((n) => Object.assign({}, n, { t: ((n.t - hb * BT) % (BT / 2)) * 2 + (i % 2 ? 0 : 0), d: n.d * 2 })).filter((n) => n.t < BT); }
-          if (x === 'octave') { const hi = Math.max(...notes.map((n) => n.p), 0); const k = hi + 12 <= (el === 'chords' || el === 'pad' ? 84 : 96) ? 12 : -12; notes.forEach((n) => { n.p += k; }); }
+        for (const k of K) {
+          const L = lvl[k] || 0, md = mode[k]; if (!L && md !== 'tease') continue; if (md === 'tease' && i % 4 !== 0) continue;
+          let notes = (byBar[k].get(sb) || []).map((n) => Object.assign({}, n, { t: n.t - sb * BT }));
+          const x = xf[k];
+          if (x === 'half' && k === 'beat') { const hb = chunk.from + (Math.floor(i / 2) % chunk.len); notes = (byBar.beat.get(hb) || []).map((n) => Object.assign({}, n, { t: (n.t - hb * BT) * 2 - (i % 2) * BT, d: n.d * 2 })).filter((n) => n.t >= 0 && n.t < BT); }
+          if (x === 'octave' && notes.length) { const hi = Math.max(...notes.map((n) => n.p)); const s2 = hi + 12 <= (k === 'chords' || k === 'pad' ? 84 : 96) ? 12 : -12; notes.forEach((n) => { n.p += s2; }); }
           if (x === 'shift') notes = notes.map((n) => Object.assign(n, { t: n.t + PPQ / 2 })).filter((n) => n.t < BT);
           if (x === 'sparse') notes = notes.filter((n, j) => (n.t % PPQ) < 30 || j % 2 === 0);
           if (md === 'tease') notes = notes.filter((n) => n.t < BT / 2).map((n) => Object.assign(n, { v: clampV(n.v * 0.85), d: Math.min(n.d, BT / 2) }));
-          else if (L === 1 && el !== 'beat') { notes.forEach((n) => { n.v = clampV(n.v * 0.74); }); if (el === 'melody' || el === 'answer') notes = notes.filter((n) => (n.t % PPQ) < 30 || n.d >= PPQ); }
+          else if (L === 1 && k !== 'beat') { notes.forEach((n) => { n.v = clampV(n.v * 0.74); }); if (k === lead || k === 'answer') notes = notes.filter((n) => (n.t % PPQ) < 30 || n.d >= PPQ); }
           else if (L === 2) notes.forEach((n) => { n.v = clampV(n.v * 1.06); });
           if (gap) notes = notes.filter((n) => n.t < BT - PPQ).map((n) => Object.assign(n, { d: Math.min(n.d, BT - PPQ - n.t) }));
-          for (const n of notes) out[el].push(Object.assign(n, { t: tb * BT + n.t }));
-          if (el === 'choir') for (const c of ccBar.get(sb) || []) choirCC.push({ t: tb * BT + (c.t - sb * BT), c: 1, v: c.v });
+          for (const n of notes) out[k].push(Object.assign(n, { t: tb * BT + n.t }));
+          for (const c of ccBar[k].get(sb) || []) occ[k].push({ t: tb * BT + (c.t - sb * BT), c: c.c, v: c.v });
         }
         // the storm: the snare rolls in eighths, then sixteenths, louder and louder, and the last beat is air
-        if (storm && i >= PL - 2 && snare != null) { const sub = i === PL - 1 ? 16 : 8; for (let k = 0; k < sub; k++) { const t = k * BT / sub; if (i === PL - 1 && t >= BT - PPQ) break; out.beat.push({ t: tb * BT + t, d: BT / sub - 10, p: snare, v: clampV(50 + 70 * (k / sub) * (i === PL - 1 ? 1 : 0.6)) }); } }
+        if (storm && i >= PL - 2 && snare != null) { const sub = i === PL - 1 ? 16 : 8; for (let q = 0; q < sub; q++) { const t = q * BT / sub; if (i === PL - 1 && t >= BT - PPQ) break; out.beat.push({ t: tb * BT + t, d: BT / sub - 10, p: snare, v: clampV(50 + 70 * (q / sub) * (i === PL - 1 ? 1 : 0.6)) }); } }
         // filters that breathe with the playing: closed for a glimpse, opening when an element arrives, wide open up front
-        for (const el of LIVE_ELS) { if (el === 'choir') continue; const L = lvl[el] || 0, md = mode[el]; const v = md === 'tease' ? 45 : !L ? null : L === 2 ? 120 : 84; if (v == null) continue;
-          const opening = B > 0 && i < 4 && L > 0 && !(cc[el].length && cc[el][cc[el].length - 1].v >= v - 2); cc[el].push({ t: tb * BT, c: 74, v: opening ? Math.round(40 + (v - 40) * (i + 1) / 4) : storm && i >= PL - 2 ? 127 : v }); }
+        for (const k of K) { if (k === 'choir') continue; const L = lvl[k] || 0, md = mode[k], v = md === 'tease' ? 45 : !L ? null : L === 2 ? 120 : 84; if (v == null) continue;
+          const opening = B > 0 && i < 4 && L > 0 && !(cc[k].length && cc[k][cc[k].length - 1].v >= v - 2); cc[k].push({ t: tb * BT, c: 74, v: opening ? Math.round(40 + (v - 40) * (i + 1) / 4) : storm && i >= PL - 2 ? 127 : v }); }
       }
     }
-    // no dead air by accident: a bar where nothing sounds gets the beat of the home groove (a storm's breath is shorter than a bar)
-    const busy = new Set(); for (const el of LIVE_ELS) for (const n of out[el]) busy.add(Math.floor(n.t / BT));
-    const gb = [...byBar.beat.keys()].filter((b) => (byBar.beat.get(b) || []).length >= 3).sort((a, b) => a - b), mid = gb.filter((b) => secs.some((x) => b >= x.from && b < x.to && (LIVE_EN[x.type] ?? 0.5) >= 0.5)), pool = mid.length ? mid : gb;
-    if (pool.length) for (let b = 0; b < total; b++) if (!busy.has(b)) { const g = pool[b % pool.length]; for (const n of byBar.beat.get(g)) out.beat.push(Object.assign({}, n, { t: b * BT + (n.t - g * BT), v: clampV(n.v * 0.8) })); }
-    for (const el of LIVE_ELS) out[el].sort((a, b) => a.t - b.t);
-    // the track list of the template: Beat, Bass, Chords, Melody, Answer, Choir, Pad
-    const order = ['beat', 'bass', 'chords', 'melody', 'answer'], T2 = order.map((el) => ({ part: el, name: TRACKS.find((t) => t[0] === el)[1], channel: chan[el], notes: out[el], cc: cc[el] }));
-    T2.push({ part: 'choir', name: 'Choir', channel: 15, notes: out.choir, cc: choirCC });
-    T2.push({ part: 'pad', name: 'Pad', channel: chan.pad, notes: out.pad, cc: cc.pad });
-    const file = noConductor(D.writeMidi(T2, { bpm: s.bpm, meter: s.meter, title: s.name, markers }));
-    let name = C.makeName((seed || 1) ^ 0x2c1b3c6d); for (let k = 1; k < 9; k++) { const w = name.toLowerCase().split(' ').filter((x) => x.length > 3); if (new Set(w).size === w.length) break; name = C.makeName(((seed || 1) ^ 0x2c1b3c6d) + k * 977); }
-    const seconds = Math.round(total * beatsPerBar * 60 / s.bpm), G = D.GENRES[r.p.genre];
-    return { name, file, seconds, bars: total, moves: markers, fileName: ('DM_Anthem_Live_' + name + '_' + G.name + '_' + NOTE[s.key.root] + '_' + s.key.scale + '_' + Math.round(s.bpm) + 'bpm_' + Math.floor(seconds / 60) + 'm' + String(seconds % 60).padStart(2, '0') + 's').replace(/[^\w]+/g, '_') + '.mid' };
+    // no dead air by accident: a bar where nothing sounds gets the groove back (a storm's breath is shorter than a bar)
+    const busy = new Set(); for (const k of K) for (const n of out[k]) busy.add(Math.floor(n.t / BT));
+    const fillK = hasBeat ? 'beat' : lead, gb = [...byBar[fillK].keys()].filter((b) => (byBar[fillK].get(b) || []).length >= (hasBeat ? 3 : 1)).sort((a, b) => a - b), mid = gb.filter((b) => secs.some((x) => b >= x.from && b < x.to && (LIVE_EN[x.type] ?? 0.5) >= 0.5)), pool = mid.length ? mid : gb;
+    if (pool.length) for (let b = 0; b < total; b++) if (!busy.has(b)) { const g = pool[b % pool.length]; for (const n of byBar[fillK].get(g)) out[fillK].push(Object.assign({}, n, { t: b * BT + (n.t - g * BT), v: clampV(n.v * 0.8) })); }
+    for (const k of K) out[k].sort((a, b) => a.t - b.t);
+    // the tracks come out in the order they came in
+    const T2 = mat.els.map((x) => ({ name: x.name, channel: x.channel, notes: out[x.key], cc: occ[x.key].concat(cc[x.key]).sort((a, b) => a.t - b.t) }));
+    const file = noConductor(D.writeMidi(T2, { bpm: mat.bpm, meter: mat.meter, title: mat.title, markers }));
+    let name = C.makeName(seed ^ 0x2c1b3c6d); for (let q = 1; q < 9; q++) { const w = name.toLowerCase().split(' ').filter((x) => x.length > 3); if (new Set(w).size === w.length) break; name = C.makeName((seed ^ 0x2c1b3c6d) + q * 977); }
+    const seconds = Math.round(total * beatsPerBar * 60 / mat.bpm);
+    return { name, file, seconds, bars: total, moves: markers, fileName: ('DM_Anthem_Live_' + name + '_' + mat.tag + '_' + Math.floor(seconds / 60) + 'm' + String(seconds % 60).padStart(2, '0') + 's').replace(/[^\w]+/g, '_') + '.mid' };
   }
+  const live = (r, minutes, seed) => playLive(liveFromResult(r), minutes, seed);
+  const liveFile = (buf, fileName, minutes, seed) => playLive(liveFromMidi(buf, fileName), minutes, seed);
   // what a dropped file says, turned into a genre, and a key and tempo when it has them
   async function hear(file) { const h = await listen(file); if (h.key !== undefined || /\.midi?$/i.test(file.name)) { try { const M = C.parseMidi(await file.arrayBuffer()); h.bpm = 60000000 / M.tempos[0].us; } catch (e) { /* no tempo */ } } return h; }
-  root.Anthem = { plan, compose, hear, fromText, rebeat, live, BEATS, GENRES, FEEL_GENRES };
+  root.Anthem = { plan, compose, hear, fromText, rebeat, live, liveFile, BEATS, GENRES, FEEL_GENRES };
 })(typeof window !== 'undefined' ? window : globalThis);
