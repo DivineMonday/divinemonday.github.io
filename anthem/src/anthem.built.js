@@ -239,7 +239,7 @@
     const tracks = bandTracks(s, beat), BT = D.barTicks(s), R = rng((p.seed ^ 0x68e31da4) >>> 0), P = {}; for (const tr of tracks) P[tr.part] = tr;
     const secs = []; let b0 = 0; for (const x of s.sections) { secs.push({ type: x.type, from: b0, to: b0 + x.bars }); b0 += x.bars; }
     const H = harmony(P, s, BT); fill(P, secs, s, BT, H, R); flavour(P, secs, s, BT, H, R, p.genre);
-    arrange(tracks, s, p.genre, p.seed, p.tools); groove(P, secs, BT, R, p.genre); shape(tracks, secs, BT);
+    arrange(tracks, s, p.genre, p.seed, p.tools); lineup(P, secs, BT, p.tools || {}); groove(P, secs, BT, R, p.genre); shape(tracks, secs, BT);
     for (const tr of tracks) tr.notes.sort((a, b) => a.t - b.t); return tracks;
   }
   // what sounds at time t: the chord tones of the chords part, else a triad on the bass note
@@ -273,13 +273,18 @@
     busy = barsOf(P.melody.notes, BT); const mel = P.melody.notes;
     const donor = secs.filter((x) => cov(busy, x) >= 0.5).sort((a, b) => (isCh(b) - isCh(a)) || (cov(busy, b) - cov(busy, a)))[0];
     const src = donor ? mel.filter((n) => n.t >= donor.from * BT && n.t < donor.to * BT) : [], dl = donor ? donor.to - donor.from : 1, med = src.length ? src.map((n) => n.p).sort((a, b) => a - b)[src.length >> 1] : 72;
-    const way = R() < 0.5 ? 'mirror' : 'shift';
+    // the theme: the first two bars of the chorus tune; other sections hint at it (bar one, half of bar two, bar one again
+    // with a new ending, then a bar of space) so the chorus can say it in full
+    const tb = donor ? donor.from : 0, theme = [0, 1].map((k) => src.filter((n) => Math.floor(n.t / BT) === tb + k));
+    if (!theme[0].length && theme[1].length) theme[0] = theme[1];
     for (const x of secs) { if (!donor || x === donor || ['intro', 'outro', 'break'].includes(x.type) || cov(busy, x) >= 0.55) continue; const own = x.type === donor.type;
-      for (let b = x.from; b < x.to; b++) { if (busy.has(b)) continue; const sb = donor.from + ((b - x.from) % dl), off = (b - sb) * BT;
-        for (const n of src) { if (Math.floor(n.t / BT) !== sb) continue; let p = own ? n.p : way === 'mirror' ? 2 * med - n.p : n.p;
-          let t = n.t + off; if (!own && way === 'shift') t += BT / 8; if (t >= (b + 1) * BT) continue;
+      for (let b = x.from; b < x.to; b++) { if (busy.has(b)) continue; const q4 = (b - x.from) % 4;
+        const take = own ? src.filter((n) => Math.floor(n.t / BT) === donor.from + ((b - x.from) % dl)) : q4 === 3 ? [] : theme[q4 === 1 ? 1 : 0];
+        const sb = take.length ? Math.floor(take[0].t / BT) : b, off = (b - sb) * BT;
+        take.forEach((n, i) => { let t = n.t + off; if (!own && q4 === 1 && t - b * BT >= BT / 2) return; if (t >= (b + 1) * BT) return;
+          let p = n.p; if (!own && q4 === 2 && i === take.length - 1) p = H.step(p, R() < 0.5 ? 2 : -2);
           const strong = (t % (BT / 4)) < 30 || n.d >= BT / 4; p = strong ? H.snapTo(p, H.at(t)) : H.scaleSnap(p); while (p > med + 9) p -= 12; while (p < med - 10) p += 12;
-          mel.push({ t, d: Math.min(n.d, (b + 1) * BT - t - 10), v: clampV(n.v - (x.type === 'verse' ? 10 : 0)), p }); } } }
+          mel.push({ t, d: Math.min(n.d, (b + 1) * BT - t - 10), v: clampV(n.v - (x.type === 'verse' ? 10 : 0)), p }); }); } }
     // pad: a bed under most of the song, following each chord change and leaving room for the melody
     busy = barsOf(P.pad.notes, BT);
     for (const x of secs) { if (cov(busy, x) >= 0.5) continue; const skip = x.type === 'intro' ? Math.floor((x.to - x.from) / 2) : 0;
@@ -288,10 +293,26 @@
           pcs.forEach((pc) => { let q = pc + 48; while (q < lo) q += 12; lo = q + 2; const prev = P.pad.notes.find((n) => n.p === q && n.t + n.d >= t - 12 && n.t < t);
             if (prev) prev.d = t + BT / 2 - 10 - prev.t; else P.pad.notes.push({ t, d: BT / 2 - 10, v: isCh(x) ? 58 : 48, p: q }); }); } } }
   }
+  // the plan: parts come in one by one, each section gives each part a role, the answer replies to the melody
+  function lineup(P, secs, BT, T) {
+    const cut = (part, a, b) => { P[part].notes = P[part].notes.filter((n) => !(n.t >= a * BT && n.t < b * BT)); for (const n of P[part].notes) if (n.t < a * BT && n.t + n.d > a * BT) n.d = Math.max(40, a * BT - n.t); };
+    const seen = {};
+    for (const x of secs) { const k = seen[x.type] = (seen[x.type] || 0) + 1, L = x.to - x.from, half = x.from + Math.floor(L / 2);
+      if (x.type === 'intro') { for (const p of ['melody', 'chords', 'answer']) cut(p, x.from, x.to); cut('pad', x.from, half); if (L >= 4) cut('bass', x.from, half); }
+      if (x.type === 'verse') { if (k === 1) { cut('pad', x.from, half); cut('answer', x.from, x.to); }
+        // chords lean back in the verse: one touch per half bar, softer
+        const ns = P.chords.notes.filter((n) => n.t >= x.from * BT && n.t < x.to * BT), keep = ns.filter((n) => (n.t % (BT / 2)) < 30);
+        if (keep.length >= ns.length * 0.3) { P.chords.notes = P.chords.notes.filter((n) => !(n.t >= x.from * BT && n.t < x.to * BT) || keep.includes(n)); for (const n of keep) { n.d = Math.max(n.d, BT / 2 - 30); n.v = clampV(n.v * 0.85); } } }
+      if (x.type === 'break') { cut('chords', x.from, x.to); if (T.moment !== 'bass') cut('bass', x.from, half); }
+      if (x.type === 'outro') { for (const p of ['melody', 'answer', 'chords']) cut(p, half, x.to); } }
+    // the answer replies: it speaks when the melody has just finished a phrase, never on top of it
+    const mel = P.melody.notes.slice().sort((a, b) => a.t - b.t), sounding = (t) => mel.some((m) => m.t <= t && m.t + m.d > t + 20), ended = (t) => mel.some((m) => m.t + m.d <= t + 20 && m.t + m.d > t - 2 * BT);
+    P.answer.notes = P.answer.notes.filter((n) => !sounding(n.t) && ended(n.t));
+  }
   // each song its own touch on the melody: two or three habits, never the same set twice in a row
-  const HABITS = ['push', 'grace', 'tail', 'turn', 'vary'];
+  const HABITS = ['push', 'tail'];
   function flavour(P, secs, s, BT, H, R, genre) {
-    const mel = P.melody.notes.sort((a, b) => a.t - b.t); if (mel.length < 4) return; const pick = new Set(['vary']); while (pick.size < 3) pick.add(HABITS[Math.floor(R() * HABITS.length)]);
+    const mel = P.melody.notes.sort((a, b) => a.t - b.t); if (mel.length < 4) return; const pick = new Set(['vary', HABITS[Math.floor(R() * HABITS.length)]]);
     const secAt = (t) => secs.find((x) => t >= x.from * BT && t < x.to * BT), isCh = (x) => x && (x.type === 'chorus' || x.type === 'drop'), add = [];
     // vary: a two-bar figure heard twice in a row changes a little the second time
     if (pick.has('vary')) { const key = (b) => mel.filter((n) => Math.floor(n.t / BT) >= b && Math.floor(n.t / BT) < b + 2).map((n) => (n.t - b * BT) + ':' + n.p).join(',');
