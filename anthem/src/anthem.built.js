@@ -480,7 +480,7 @@
     const out = {}, cc = {}, occ = {}; for (const k of K) { out[k] = []; cc[k] = []; occ[k] = []; } const markers = [];
     const lvl = {}; for (const k of K) lvl[k] = 0; if (hasBeat) lvl.beat = 1; if (E.pad && R() < 0.5) lvl.pad = 1; if (!hasBeat) lvl[pick(K.filter((k) => k !== lead))] = 1;
     const openers = chunks.filter((c) => has(lead, c) || (hasBeat && has('beat', c)));
-    let xf = {}, chunk = pick(openers.length ? openers : chunks), goal = 0.35, lastMove = '';
+    let xf = {}, chunk = pick(openers.length ? openers : chunks), goal = 0.35, lastMove = '', lastKey = '', sameChunk = 0, leadAway = 0, lastSig = '', fade = 1;
     const count = {}, maxE = 1.4 + 1.3 * Math.max(1, K.length - 1);
     const energy = () => K.reduce((a, k) => a + (lvl[k] || 0) * (k === 'beat' ? 1.4 : 1), 0) / maxE;
     const present = () => K.filter((k) => lvl[k] > 0), absent = () => { const a = K.filter((k) => !lvl[k] && k !== 'beat' && byBar[k].size); return a.includes('choir') ? a.concat(['choir', 'choir']) : a; };
@@ -491,7 +491,8 @@
       const mode = {}; let storm = false, move = 'flow', who = '';
       if (B === 0) { move = 'open'; const way = pick(['tease', 'tease', 'alone', 'bed']); const h = pick(hooks.filter((k) => byBar[k].size).concat(E.choir ? ['choir'] : []));
         if (way === 'tease' && h) { who = h; mode[h] = 'tease'; toward(h); } else if (way === 'alone' && h) { who = h; lvl[h] = 1; toward(h); if (hasBeat && R() < 0.5) lvl.beat = 0; } else { who = E.pad ? 'pad' : h; if (who) { lvl[who] = 1; toward(who); } } }
-      else if (pos > 0.86) { move = 'let go'; const p = present().filter((k) => k !== 'beat' && k !== 'pad'); if (p.length) { who = pick(p); lvl[who] = 0; } if (pos > 0.94) for (const k of hooks) if (k !== 'bass' && k !== lead) lvl[k] = 0; }
+      else if (pos > 0.86) { // letting go: every phrase one voice that really sounds steps out, at the very end the beat thins too
+        move = 'let go'; const p = present().filter((k) => k !== 'beat' && has(k, chunk)); if (p.length > 1) { who = pick(p); lvl[who] = 0; } else if (hasBeat && xf.beat !== 'sparse') { xf.beat = 'sparse'; who = 'beat'; } else if (p.length) { who = p[0]; xf[who] = xf[who] === 'sparse' ? 'octave' : 'sparse'; } }
       else {
         const up = goal > e + 0.08, down = goal < e - 0.08, opts = [];
         if (up) opts.push('front', 'front', 'tease', 'home'); if (up && hasBeat) opts.push('storm'); if (down) opts.push('pull', 'pull', 'tease', 'flip'); opts.push('dig', 'flip', 'flow');
@@ -499,18 +500,31 @@
         do { move = pick(opts); } while (move === lastMove && opts.some((o) => o !== lastMove));
         if (move === 'tease') { const a = absent().filter((k) => hooks.includes(k)); if (a.length) { who = pick(a); mode[who] = 'tease'; toward(who); } else move = 'flip'; }
         if (move === 'front') { const c = absent().concat(present().filter((k) => lvl[k] === 1 && k !== 'beat')); if (c.length) { who = pick(c); for (const k of K) if (lvl[k] === 2) lvl[k] = 1; lvl[who] = 2; toward(who); if (hasBeat && !lvl.beat && R() < 0.7) lvl.beat = 1; } else move = 'home'; }
-        if (move === 'pull') { const p = present().filter((k) => k !== 'beat' || R() < 0.3); if (p.length > 1) { who = pick(p); lvl[who] = 0; delete xf[who]; } else move = 'flip'; }
-        if (move === 'dig') { const f = K.filter((k) => lvl[k] === 2); who = f.length ? f[0] : pick(present()); xf[who] = pick(who === 'beat' ? ['half', 'sparse'] : who === lead || who === 'answer' ? ['octave', 'shift', 'sparse'] : ['octave', 'sparse']); }
-        if (move === 'flip') { const p = present(); if (p.length) { who = pick(p); xf[who] = xf[who] ? undefined : pick(who === 'beat' ? ['half', 'sparse'] : ['octave', 'sparse']); } }
+        if (move === 'pull') { const p = present().filter((k) => (k !== 'beat' || R() < 0.3) && has(k, chunk)); if (p.length > 1) { who = pick(p); lvl[who] = 0; delete xf[who]; } else move = 'flip'; }
+        if (move === 'dig') { const f = K.filter((k) => lvl[k] === 2 && has(k, chunk)), pr = present().filter((k) => has(k, chunk)); who = f.length ? f[0] : pr.length ? pick(pr) : pick(present()); const was = xf[who]; const opts2 = (who === 'beat' ? ['half', 'sparse'] : who === lead || who === 'answer' ? ['octave', 'shift', 'sparse'] : ['octave', 'sparse']).filter((x) => x !== was); xf[who] = pick(opts2); }
+        if (move === 'flip') { const p = present().filter((k) => has(k, chunk)); if (p.length) { who = pick(p); xf[who] = xf[who] ? undefined : pick(who === 'beat' ? ['half', 'sparse'] : ['octave', 'sparse']); } }
         if (move === 'storm') storm = true;
         if (move === 'home') { chunk = homeC; xf = {}; for (const k of K) if (byBar[k].size) lvl[k] = 1; lvl[lead] = 2; if (E.choir && byBar.choir.size) lvl.choir = 2; who = 'everyone'; }
         if (move === 'flow') { const near = chunks.filter((c) => c !== chunk && Math.abs(c.en - goal) < 0.35); chunk = near.length ? pick(near) : pick(chunks); const a = absent(); if (a.length) { who = pick(a); lvl[who] = 1; toward(who); } const p = present().filter((k) => k !== 'beat' && k !== who); if (p.length > 3) lvl[pick(p)] = 0; }
         if (move !== 'home' && move !== 'flow' && R() < 0.35) { const f = K.find((k) => lvl[k] === 2), near = chunks.filter((c) => Math.abs(c.en - (goal + e) / 2) < 0.3 && (!f || has(f, c))); if (near.length) chunk = pick(near); }
       }
+      if (B > 0 && pos <= 0.86) {
+        const sounding = () => K.filter((k) => (lvl[k] > 0 || mode[k]) && has(k, chunk)), key = () => chunk.from + '|' + sounding().map((k) => k + lvl[k] + (xf[k] || '') + (mode[k] || '')).join(',') + (storm ? 's' : '');
+        if (move !== 'home' && (sameChunk >= 2 || key() === lastKey)) { // stuck: go somewhere else in the track and bring someone who was not there
+          const away = absent().filter((k) => k !== 'beat'), w = leadAway >= 2 && byBar[lead].size ? lead : away.length ? pick(away) : null;
+          const c = chunks.filter((x) => x !== chunk && (!w || has(w, x))); if (c.length) chunk = pick(c); if (w) { lvl[w] = Math.max(1, lvl[w] || 0); who = w; } move = 'flow';
+        }
+        if (move !== 'home' && leadAway >= 2 && byBar[lead].size) { toward(lead); lvl[lead] = 2; who = lead; move = 'front'; }
+        if (key() === lastKey) { const c = chunks.filter((x) => x !== chunk); if (c.length) chunk = pick(c); }
+        lastKey = key();
+      }
+      sameChunk = chunk === (playLive.prev || null) ? sameChunk + 1 : 0; playLive.prev = chunk;
       count[move] = (count[move] || 0) + 1; lastMove = move;
       if (!present().some((k) => k !== 'beat') && !Object.keys(mode).length && pos < 0.9) { const a = absent(); if (a.length) lvl[pick(a)] = 1; }
       markers.push({ t: B * BT, text: move === 'open' ? 'Open: ' + (mode[who] === 'tease' ? 'a glimpse of ' : '') + word(who) : move === 'home' ? 'Home: everyone' : move === 'storm' ? 'Storm' : move === 'let go' ? 'Letting go' : move === 'tease' ? 'Tease: ' + word(who) : move === 'front' ? 'Up front: ' + word(who) : move === 'pull' ? 'Pulled away: ' + word(who) : move === 'dig' ? 'Digging into ' + word(who) : move === 'flip' ? 'Turned around: ' + word(who) : 'Flowing on' + (who ? ' with ' + word(who) : '') });
-      for (let i = 0; i < PL; i++) {
+      // the phrase is played in the head first: if it would sound exactly like the last one, the player goes elsewhere
+      const render = () => { const po = {}, poc = {}; for (const k of K) { po[k] = []; poc[k] = []; }
+        for (let i = 0; i < PL; i++) {
         const tb = B + i, sb = chunk.from + (i % chunk.len), gap = storm && i === PL - 1;
         for (const k of K) {
           const L = lvl[k] || 0, md = mode[k]; if (!L && md !== 'tease') continue; if (md === 'tease' && i % 4 !== 0) continue;
@@ -524,12 +538,21 @@
           else if (L === 1 && k !== 'beat') { notes.forEach((n) => { n.v = clampV(n.v * 0.74); }); if (k === lead || k === 'answer') notes = notes.filter((n) => (n.t % PPQ) < 30 || n.d >= PPQ); }
           else if (L === 2) notes.forEach((n) => { n.v = clampV(n.v * 1.06); });
           if (gap) notes = notes.filter((n) => n.t < BT - PPQ).map((n) => Object.assign(n, { d: Math.min(n.d, BT - PPQ - n.t) }));
-          for (const n of notes) out[k].push(Object.assign(n, { t: tb * BT + n.t }));
-          for (const c of ccBar[k].get(sb) || []) occ[k].push({ t: tb * BT + (c.t - sb * BT), c: c.c, v: c.v });
+          for (const n of notes) po[k].push(Object.assign(n, { t: tb * BT + n.t, v: clampV(n.v * fade) }));
+          for (const c of ccBar[k].get(sb) || []) poc[k].push({ t: tb * BT + (c.t - sb * BT), c: c.c, v: c.v });
         }
         // the storm: the snare rolls in eighths, then sixteenths, louder and louder, and the last beat is air
-        if (storm && i >= PL - 2 && snare != null) { const sub = i === PL - 1 ? 16 : 8; for (let q = 0; q < sub; q++) { const t = q * BT / sub; if (i === PL - 1 && t >= BT - PPQ) break; out.beat.push({ t: tb * BT + t, d: BT / sub - 10, p: snare, v: clampV(50 + 70 * (q / sub) * (i === PL - 1 ? 1 : 0.6)) }); } }
-        // filters that breathe with the playing: closed for a glimpse, opening when an element arrives, wide open up front
+        if (storm && i >= PL - 2 && snare != null) { const sub = i === PL - 1 ? 16 : 8; for (let q = 0; q < sub; q++) { const t = q * BT / sub; if (i === PL - 1 && t >= BT - PPQ) break; po.beat.push({ t: tb * BT + t, d: BT / sub - 10, p: snare, v: clampV(50 + 70 * (q / sub) * (i === PL - 1 ? 1 : 0.6)) }); } }
+        }
+        return { po, poc }; };
+      const sigOf = (ph) => K.map((k) => ph.po[k].map((n) => (n.t - B * BT) + ':' + n.p + ':' + n.v).join(',')).join('|');
+      let ph = render(), sig = sigOf(ph);
+      for (let tries = 0; sig === lastSig && tries < 4; tries++) {
+        if (move === 'let go') { fade *= 0.8; } else { const a = absent(), w = a.length ? pick(a) : null, c = chunks.filter((x) => x !== chunk && (!w || has(w, x))); if (c.length) chunk = pick(c); if (w) lvl[w] = 1; markers[markers.length - 1].text = 'Flowing on' + (w ? ' with ' + word(w) : ''); }
+        ph = render(); sig = sigOf(ph); }
+      lastSig = sig; leadAway = ph.po[lead].length ? 0 : leadAway + 1; for (const k of K) { for (const n of ph.po[k]) out[k].push(n); for (const c of ph.poc[k]) occ[k].push(c); }
+      for (let i = 0; i < PL; i++) { const tb = B + i;
+  // filters that breathe with the playing: closed for a glimpse, opening when an element arrives, wide open up front
         for (const k of K) { if (k === 'choir') continue; const L = lvl[k] || 0, md = mode[k], v = md === 'tease' ? 45 : !L ? null : L === 2 ? 120 : 84; if (v == null) continue;
           const opening = B > 0 && i < 4 && L > 0 && !(cc[k].length && cc[k][cc[k].length - 1].v >= v - 2); cc[k].push({ t: tb * BT, c: 74, v: opening ? Math.round(40 + (v - 40) * (i + 1) / 4) : storm && i >= PL - 2 ? 127 : v }); }
       }
