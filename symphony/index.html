@@ -1383,7 +1383,9 @@ function halfCell(cell, meter) {
 }
 function planMel(c, ph, r) {
   const sp = ph.mel, K = ph.key, meter = c.meter, sc = ph.stretch || 1, BAR = c.bar * sc;
-  const th = getTheme(c, sp.from || sp.id || ph.uid, ph.char, r);
+  // one theme is not the whole piece: outside the development, linking passages often bring material of their own
+  const own = sp.type === 'free' && sp.from && !/Dev/.test(ph.sec || '') && mkRng(c.x.seed * 61 + ph.t0)() < .65;
+  const th = getTheme(c, own ? 'own' + ph.uid : (sp.from || sp.id || ph.uid), ph.char, r);
   const roles = rolesFor(sp.type || 'free', ph.tpl.length, sp.cad);
   const g1 = new Set([dpc(K, 0)]), g3 = new Set([dpc(K, 2)]), g27 = new Set([dpc(K, 1), mod(K.t + 11, 12)]), gH = new Set([dpc(K, 1), dpc(K, 4), mod(K.t + 11, 12)]);
   const seq = r() < .6 ? -1 : 1;
@@ -2388,6 +2390,19 @@ Y.writeMidi = writeMidi;
 Y.toBerlin = toBerlin;
 
 /* ================= main ================= */
+/* the little arch that turns up everywhere (up a step, up a third, back down a third, down a step): when it appears,
+   the line takes another road: the peak climbs one step higher, or holds, so no two pieces share the same turn of phrase */
+function breakCliche(c) {
+  const M = c.mel, r = mkRng(c.x.seed * 53 + 3);
+  for (let i = 0; i + 4 < M.length; i++) {
+    const d = [1, 2, 3, 4].map(k => M[i + k].m - M[i + k - 1].m);
+    if (!(d[0] >= 1 && d[0] <= 2 && d[1] >= 3 && d[1] <= 4 && d[2] <= -3 && d[2] >= -4 && d[3] <= -1 && d[3] >= -2)) continue;
+    const K = (M[i + 2].ph && M[i + 2].ph.key) || c.x.K, sc = new Set(K.sc.map(v => mod(K.t + v, 12)));
+    const up = (p) => { let q = p + 1; while (!sc.has(mod(q, 12))) q++; return q; };
+    if (r() < .5) { M[i + 2].m = up(M[i + 2].m); M[i + 3].m = up(M[i + 3].m); } else M[i + 3].m = M[i + 2].m;
+    i += 4;
+  }
+}
 function compose(o) {
   const era = ERAS[o.era] ? o.era : 'classical';
   const form = FORMS[o.form] ? o.form : 'minuet';
@@ -2409,6 +2424,7 @@ function compose(o) {
   shapeDyn(c);
   genBass(c);
   genMel(c);
+  breakCliche(c);
   genBass(c, true);
   bassForMelPhrases(c);
   voiceAll(c);

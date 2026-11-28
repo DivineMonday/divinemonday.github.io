@@ -171,7 +171,7 @@
   // ---------- the arranger: one motif for everyone, breathing together, each part its own moment ----------
   const OFFBEAT = new Set(['house', 'garage', 'dub', 'dubtechno', 'trance', 'eurodance', 'minimal', 'techno', 'club']);
   // a toolbox, not a rulebook: every song draws a few ideas of its own
-  const TOOLS = { pre: ['silence', 'swell', 'fill', 'none', 'none'], answer: ['motif', 'counter', 'asis', 'asis'], moment: ['bass', 'chords', 'beat', 'melody', 'none', 'none'],
+  const TOOLS = { pre: ['silence', 'swell', 'fill', 'none', 'none'], answer: ['counter', 'counter', 'motif', 'asis'], moment: ['bass', 'chords', 'beat', 'melody', 'none', 'none'],
     bass: ['kick', 'melody', 'free', 'free'], breath: ['every8', 'sections', 'none', 'none'], accent: ['on', 'off', 'off'] };
   function pickTools(R, genre) {
     const pick = (a) => a[Math.floor(R() * a.length)], keys = Object.keys(TOOLS), on = new Set(); const n = 2 + (R() < 0.5 ? 1 : 0);
@@ -192,7 +192,7 @@
     const med = (a) => a.length ? a.map((n) => n.p).sort((x, y) => x - y)[a.length >> 1] : null, melodic = ['bass', 'chords', 'pad', 'melody', 'answer'];
     const ansCenter = med(P.answer.notes) || (med(mel) != null ? med(mel) - 12 : 60), ansVel = mel.length ? Math.round(mel.reduce((a, n) => a + n.v, 0) / mel.length) - 12 : 70;
     // the answer: never an empty track; when the engine left it nearly silent it echoes the melody
-    T.answer = T.answer === 'silent' ? 'asis' : T.answer; if (T.answer === 'asis' && barsOf(P.answer.notes, BT).size < b0 * 0.3) T.answer = R() < 0.6 ? 'motif' : 'counter';
+    T.answer = T.answer === 'silent' ? 'asis' : T.answer; if (T.answer === 'asis' && barsOf(P.answer.notes, BT).size < b0 * 0.3) T.answer = R() < 0.25 ? 'motif' : 'counter';
     if (T.answer === 'motif' || T.answer === 'counter') {
       const keep = P.answer.notes.filter((a) => !mel.some((m) => m.t < a.t + a.d + 30 && m.t + m.d > a.t - 30));
       if (T.answer === 'motif') {
