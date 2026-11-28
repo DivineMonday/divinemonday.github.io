@@ -1016,14 +1016,16 @@ F.rondo = (c, x) => {
   if (x.len >= 2) again(c, x, A, { inten: .7, dyn: .7, lead: 'tutti' });
   P(c, x, { key: K, tpl: TP(x, 'transA', K, X), mel: { type: 'free', from: 'R' }, inten: .65, dyn: .65, sec: 'B', label: 'Episode B' });
   P(c, x, { key: KD, tpl: TP(x, 'transB'), mel: { type: 'free', from: 'R', cad: 'HC' }, inten: .6, dyn: .6, sec: 'B' });
+  const rv = mkRng(x.seed * 37 + 11), rB2 = rv() < .4, rHalf = rv() < .4, rC = rv() < .4, rLast = rv() < .5;
   P(c, x, { key: KD, tpl: TP(x, 'sent'), mel: { type: 'sent', id: 'RB', char: 'lyr' }, inten: .4, dyn: .45, lead: 'ww', sec: 'B' });
+  if (rB2) P(c, x, { key: KD, tpl: TP(x, 'cons'), mel: { type: 'cons', id: 'RB', head: 1 }, inten: .45, dyn: .5, lead: 'str', sec: 'B' });
   P(c, x, { key: K, tpl: TP(x, 'retrans'), mel: { type: 'free', from: 'RB', cad: 'HC' }, inten: .5, dyn: .55, btex: 'pedal', pedal: 4, sec: 'B' });
-  again(c, x, A, { sec: 'A', label: 'Refrain' });
-  const C1 = P(c, x, { key: KC, tpl: TP(x, 'ante'), mel: { type: 'ante', id: 'RC', char: 'brisk' }, inten: .8, dyn: .8, sec: 'C', label: 'Episode C' });
-  P(c, x, { key: KC, tpl: TP(x, 'cons'), mel: { type: 'cons', id: 'RC', head: 1 }, inten: .8, dyn: .8, sec: 'C' });
-  if (x.len >= 2) P(c, x, { key: KC, tpl: TP(x, 'close'), mel: { type: 'free', from: 'RC' }, inten: .75, dyn: .75, sec: 'C' });
+  again(c, x, rHalf ? A.slice(0, 1) : A, { sec: 'A', label: 'Refrain', orn: rHalf ? null : 'turn' });
+  const C1 = P(c, x, { key: rC ? KD : KC, tpl: TP(x, 'ante'), mel: { type: 'ante', id: 'RC', char: 'brisk' }, inten: .8, dyn: .8, sec: 'C', label: 'Episode C' });
+  P(c, x, { key: rC ? KD : KC, tpl: TP(x, 'cons'), mel: { type: 'cons', id: 'RC', head: 1 }, inten: .8, dyn: .8, sec: 'C' });
+  if (x.len >= 2) P(c, x, { key: rC ? KD : KC, tpl: TP(x, 'close'), mel: { type: 'free', from: 'RC' }, inten: .75, dyn: .75, sec: 'C' });
   P(c, x, { key: K, tpl: TP(x, 'retrans'), mel: { type: 'free', from: 'R', cad: 'HC' }, inten: .55, dyn: .5, btex: 'pedal', pedal: 4, sec: 'C' });
-  again(c, x, A, { sec: 'A', label: 'Refrain', inten: .75, dyn: .75, lead: 'tutti' });
+  again(c, x, A, { sec: 'A', label: 'Refrain', inten: .75, dyn: .75, lead: rLast ? 'tutti' : 'ww', orn: rLast ? 'dot' : 'turn' });
   P(c, x, { key: K, tpl: TP(x, 'coda'), mel: { type: 'free', from: 'R', cad: 'PAC' }, inten: .9, dyn: .9, sec: 'Coda', label: 'Coda' });
   finalPh(c, x, K);
   void C1;
@@ -1033,16 +1035,21 @@ F.sonata = (c, x, opt) => {
   const K = x.K, maj = K.m === 'M', KD = maj ? relKey(K, 4, 'M') : relKey(K, 2, 'M'), X = maj ? 'V' : 'III';
   const ex = [];
   ex.push(P(c, x, { key: K, tpl: TP(x, 'sent'), mel: { type: 'sent', id: 'P', char: 'brisk' }, inten: .6, dyn: .65, sec: 'Exposition', label: 'Exposition: first theme' }));
+  // every sonata its own proportions: a counterstatement, a longer bridge, a second closing, a development of its own size
+  const vr = mkRng(x.seed * 31 + 7), vCounter = vr() < .35, vBridge = vr() < .3, vS2 = vr() < .7, vClose2 = vr() < .3, vDev = vr() < .5 ? 1 : 0, vCoda2 = vr() < .35, vRot = Math.floor(vr() * 4);
+  if (vCounter) again(c, x, [ex[0]], { lead: vr() < .5 ? 'tutti' : 'ww', dyn: .78, inten: .7 });
   ex.push(P(c, x, { key: K, tpl: TP(x, 'transA', K, X), mel: { type: 'free', from: 'P' }, inten: .78, dyn: .72, sec: 'Exposition', label: 'Transition' }));
+  if (vBridge) P(c, x, { key: K, tpl: TP(x, 'transA', K, X), mel: { type: 'free', from: 'P' }, inten: .82, dyn: .76, lead: 'ww', sec: 'Exposition' });
   ex.push(P(c, x, { key: KD, tpl: TP(x, 'transB'), mel: { type: 'free', from: 'P', cad: 'HC' }, inten: .75, dyn: .7, sec: 'Exposition' }));
   ex.push(P(c, x, { key: KD, tpl: TP(x, 'ante'), mel: { type: 'ante', id: 'S', char: 'lyr' }, inten: .38, dyn: .42, lead: 'ww', sec: 'Exposition', label: 'Second theme' }));
   ex.push(P(c, x, { key: KD, tpl: TP(x, 'cons'), mel: { type: 'cons', id: 'S', head: 1 }, inten: .42, dyn: .45, lead: 'str', sec: 'Exposition' }));
-  ex.push(P(c, x, { key: KD, tpl: TP(x, 'sent'), mel: { type: 'sent', id: 'S2', char: 'brisk' }, inten: .72, dyn: .72, sec: 'Exposition' }));
+  if (vS2) ex.push(P(c, x, { key: KD, tpl: TP(x, 'sent'), mel: { type: 'sent', id: 'S2', char: 'brisk' }, inten: .72, dyn: .72, sec: 'Exposition' }));
   ex.push(P(c, x, { key: KD, tpl: TP(x, 'close'), mel: { type: 'close' }, inten: .82, dyn: .8, sec: 'Exposition', label: 'Closing' }));
+  if (vClose2) ex.push(P(c, x, { key: KD, tpl: TP(x, 'close'), mel: { type: 'free', from: 'S' }, inten: .7, dyn: .6, lead: 'ww', sec: 'Exposition' }));
   if (x.len >= 3 && !opt.noRepeat) again(c, x, ex);
   // development
-  const path = maj ? [relKey(K, 5, 'm'), relKey(K, 1, 'm'), relKey(K, 2, 'm'), relKey(K, 3, 'M')] : [relKey(K, 3, 'm'), relKey(K, 6, 'M'), relKey(K, 2, 'M'), relKey(K, 5, 'M')];
-  const nBlocks = x.len === 1 ? 2 : x.len === 2 ? 3 : 4;
+  const path0 = maj ? [relKey(K, 5, 'm'), relKey(K, 1, 'm'), relKey(K, 2, 'm'), relKey(K, 3, 'M')] : [relKey(K, 3, 'm'), relKey(K, 6, 'M'), relKey(K, 2, 'M'), relKey(K, 5, 'M')];
+  const path = path0.slice(vRot).concat(path0.slice(0, vRot)), nBlocks = Math.min(4, (x.len === 1 ? 2 : x.len === 2 ? 3 : 4) + vDev);
   const dv = TP(x, 'dev');
   for (let i = 0; i < nBlocks; i++) P(c, x, { key: path[i], tpl: dv + ' | ' + dv, mel: { type: 'free', from: i % 2 ? 'S' : 'P' }, inten: .82 + i * .03, dyn: .7 + i * .05, lead: i % 2 ? 'ww' : 'str', tex: x.era === 'baroque' ? 'continuo' : 'tremolo', sec: 'Development', label: i ? null : 'Development', imit: 1, ctr: false });
   P(c, x, { key: K, tpl: TP(x, 'retrans'), mel: { type: 'free', from: 'P', cad: 'HC' }, inten: .7, dyn: .6, btex: 'pedal', pedal: 4, sec: 'Development', label: 'Retransition' });
@@ -1051,7 +1058,8 @@ F.sonata = (c, x, opt) => {
   P(c, x, { key: K, tpl: TP(x, 'transA', K, 'V'), mel: { type: 'free', from: 'P' }, inten: .78, dyn: .72, sec: 'Recapitulation' });
   P(c, x, { key: K, tpl: TP(x, 'stayB'), mel: { type: 'free', from: 'P', cad: 'HC' }, inten: .72, dyn: .7, sec: 'Recapitulation' });
   again(c, x, ex.slice(3), { key: K, sec: 'Recapitulation' });
-  P(c, x, { key: K, tpl: TP(x, 'coda'), mel: { type: 'free', from: 'P', cad: 'PAC' }, inten: .92, dyn: .9, sec: 'Coda', label: 'Coda' });
+  if (vCoda2) P(c, x, { key: K, tpl: TP(x, 'ante'), mel: { type: 'free', from: 'S' }, inten: .5, dyn: .45, lead: 'ww', sec: 'Coda', label: 'Coda' });
+  P(c, x, { key: K, tpl: TP(x, 'coda'), mel: { type: 'free', from: 'P', cad: 'PAC' }, inten: .92, dyn: .9, sec: 'Coda', label: vCoda2 ? null : 'Coda' });
   finalPh(c, x, K);
 };
 function ornRestate(c, x, phs, orn, ov) { return again(c, x, phs, Object.assign({ orn }, ov)); }
@@ -2494,6 +2502,7 @@ Y.planSuite = function (chain, K, era) {
       else if (fe.mode === 'M' && key.m === 'm') key = relKey(key, 2, 'M');
       tempo = Math.round(tempo * fe.tempo);
     }
+    if (c.tempoMul) tempo = Math.round(tempo * c.tempoMul);
     out.push({ form: c.form, key, tempo, scherzo, seed: c.seed, feel: c.feel });
   });
   return out;

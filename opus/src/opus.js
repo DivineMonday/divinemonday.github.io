@@ -11,8 +11,8 @@
   const TEMPLATE = Y.INST.map((i) => i.id).filter((id) => id !== 'pno');
   const FEELS = Object.keys(Y.FEELINGS), ERAS = Object.keys(Y.ERAS).filter((e) => Y.PRESETS[e]);
   const ERA_NAME = { baroque: 'Baroque', classical: 'Classical', romantic: 'Romantic', impressionist: 'Impressionist', modern: 'Modern', experimental: 'Experimental', pop: 'Pop' };
-  const SLOT = { opener: ['sonata', 'overture', 'sonata'], slow: ['aria', 'variations', 'canon', 'aria'], dance: ['minuet', 'waltz', 'march', 'minuet'], finale: ['rondo', 'fugue', 'sonata', 'rondo'] };
-  const CAT_OF = { sonata: ['opener', 'finale'], overture: ['opener'], aria: ['slow'], variations: ['slow'], canon: ['slow'], minuet: ['dance'], waltz: ['dance'], march: ['dance'], rondo: ['finale'], fugue: ['finale', 'opener'] };
+  const SLOT = { opener: ['sonata', 'overture', 'fugue', 'march', 'sonata'], slow: ['aria', 'variations', 'canon', 'aria'], dance: ['minuet', 'waltz', 'march', 'minuet'], finale: ['rondo', 'fugue', 'sonata', 'rondo'] };
+  const CAT_OF = { sonata: ['opener', 'finale'], overture: ['opener'], aria: ['slow'], variations: ['slow'], canon: ['slow'], minuet: ['dance'], waltz: ['dance'], march: ['dance', 'opener'], rondo: ['finale'], fugue: ['finale', 'opener'] };
   // the choir that belongs with an era, and the daring ones it may also try
   const CHOIR_FIT = { baroque: ['baroque', 'polyphony'], classical: ['baroque', 'polyphony'], romantic: ['film', 'baroque'], impressionist: ['film', 'polyphony'], modern: ['film', 'gregorian'], experimental: ['gregorian', 'film'], pop: ['gospel', 'film'] };
   const FEEL_CHOIR = { solemn: ['gregorian', 'polyphony'], joyful: ['gospel', 'baroque'], heroic: ['film', 'baroque'], tender: ['polyphony', 'film'], mysterious: ['gregorian', 'film'], melancholy: ['film', 'polyphony'], stormy: ['film'], dreamy: ['film', 'polyphony'] };
@@ -24,7 +24,7 @@
     const era = fe && R() < 0.6 ? fe.era : pick(ERAS);
     const four = R() < 0.65, slots = four ? ['opener', 'slow', 'dance', 'finale'] : pick([['opener', 'slow', 'finale'], ['slow', 'dance', 'finale'], ['opener', 'dance', 'finale']]);
     const used = new Set();
-    const chain = slots.map((sl) => { const liked = fe ? fe.forms.filter((x) => (CAT_OF[x] || []).includes(sl) && !used.has(x)) : []; let form = liked.length && R() < 0.6 ? pick(liked) : pick(SLOT[sl].filter((x) => !used.has(x))); if (!form) form = pick(SLOT[sl]); used.add(form); return { form, seed: Math.floor(R() * 1e9) + 1 }; });
+    const chain = slots.map((sl) => { const liked = fe ? fe.forms.filter((x) => (CAT_OF[x] || []).includes(sl) && !used.has(x)) : []; let form = liked.length && R() < 0.6 ? pick(liked) : pick(SLOT[sl].filter((x) => !used.has(x))); if (!form) form = pick(SLOT[sl]); used.add(form); return { form, seed: Math.floor(R() * 1e9) + 1, feel: f || undefined, tempoMul: 0.86 + R() * 0.28 }; });
     const minor = fe ? fe.mode === 'm' : R() < 0.5;
     const key = hint.key || (fe && R() < 0.35 ? pick(fe.keys) : pick(minor ? MIN : MAJ));
     let style = R() < 0.7 ? pick((f && FEEL_CHOIR[f] && R() < 0.5 ? FEEL_CHOIR[f] : CHOIR_FIT[era])) : pick(['gregorian', 'polyphony', 'baroque', 'film', 'gospel']);
@@ -46,7 +46,8 @@
     const roles = new Set(choir.roles), choirS = roles.size / 8 + (roles.has('rest') ? 0.3 : 0) + (roles.has('tutti') ? 0.3 : 0);
     const figs = figures(mel); let sim = 0, same = 0; const combo = p.era + '/' + p.style + '/' + p.chain.map((c) => c.form).join('-');
     for (const h of history) { const s = new Set(h.figs); let k = 0; for (const g of figs) if (s.has(g)) k++; sim = Math.max(sim, k / Math.max(1, Math.min(figs.length, h.figs.length))); if (h.combo === combo) same = 1; }
-    const score = 2 * ivEnt + 1.5 * rhEnt + rangeS + arc + 1.2 * dynR + choirS - 6 * ping - 3 * sim - 1.2 * same;
+    let fresh = 0; const last = history.slice(-3); for (const h of last) { const [era, , forms] = (h.combo || '').split('/'); if (forms && forms.split('-')[0] === p.chain[0].form) fresh += 0.7; if (era === p.era) fresh += 0.4; }
+    const score = -fresh + 2 * ivEnt + 1.5 * rhEnt + rangeS + arc + 1.2 * dynR + choirS - 6 * ping - 3 * sim - 1.2 * same;
     return { score, figs, combo, parts: { ivEnt, rhEnt, range, ping, arc, sim } };
   }
 

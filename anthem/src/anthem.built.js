@@ -23,7 +23,8 @@
     const roles = new Set(choir.roles), choirS = roles.size / 8 + (roles.has('rest') ? 0.3 : 0) + (roles.has('tutti') ? 0.3 : 0);
     const figs = figures(mel); let sim = 0, same = 0; const combo = p.era + '/' + p.style + '/' + p.chain.map((c) => c.form).join('-');
     for (const h of history) { const s = new Set(h.figs); let k = 0; for (const g of figs) if (s.has(g)) k++; sim = Math.max(sim, k / Math.max(1, Math.min(figs.length, h.figs.length))); if (h.combo === combo) same = 1; }
-    const score = 2 * ivEnt + 1.5 * rhEnt + rangeS + arc + 1.2 * dynR + choirS - 6 * ping - 3 * sim - 1.2 * same;
+    let fresh = 0; const last = history.slice(-3); for (const h of last) { const [era, , forms] = (h.combo || '').split('/'); if (forms && forms.split('-')[0] === p.chain[0].form) fresh += 0.7; if (era === p.era) fresh += 0.4; }
+    const score = -fresh + 2 * ivEnt + 1.5 * rhEnt + rangeS + arc + 1.2 * dynR + choirS - 6 * ping - 3 * sim - 1.2 * same;
     return { score, figs, combo, parts: { ivEnt, rhEnt, range, ping, arc, sim } };
   }
 
